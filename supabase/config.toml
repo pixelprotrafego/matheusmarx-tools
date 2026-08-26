@@ -1,0 +1,7 @@
+project_id = "mzbehgvrvwkjhosoyylj"
+
+[functions.transcribe-audio]
+verify_jwt = false
+
+[functions.telegram-webhook]
+verify_jwt = false

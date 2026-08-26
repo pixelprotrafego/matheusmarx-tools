@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 0 0% 4%;
+    --foreground: 45 10% 90%;
+
+    --card: 0 0% 7%;
+    --card-foreground: 45 10% 90%;
+
+    --popover: 0 0% 7%;
+    --popover-foreground: 45 10% 90%;
+
+    --primary: 43 74% 49%;
+    --primary-foreground: 0 0% 4%;
+
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 45 10% 90%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 55%;
+
+    --accent: 43 74% 49%;
+    --accent-foreground: 0 0% 4%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 0 0% 16%;
+    --input: 0 0% 16%;
+    --ring: 43 74% 49%;
+
+    --radius: 0.5rem;
+
+    --gold: 43 74% 49%;
+    --gold-light: 43 80% 65%;
+    --gold-dark: 43 70% 35%;
+
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 45 10% 90%;
+    --sidebar-primary: 43 74% 49%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 45 10% 90%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 43 74% 49%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+  }
+}
+
+@layer utilities {
+  .text-gradient-gold {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[hsl(var(--gold-light))] via-[hsl(var(--gold))] to-[hsl(var(--gold-dark))];
+  }
+
+  .border-gold {
+    border-color: hsl(var(--gold) / 0.3);
+  }
+
+  .glow-gold {
+    box-shadow: 0 0 20px hsl(var(--gold) / 0.15), 0 0 60px hsl(var(--gold) / 0.05);
+  }
+
+  .line-gold {
+    background: linear-gradient(90deg, transparent, hsl(var(--gold) / 0.5), transparent);
+    height: 1px;
+  }
+
+  .tiptap-shell .ProseMirror {
+    outline: none;
+    min-height: 400px;
+    color: hsl(var(--foreground));
+    line-height: 1.6;
+    padding: 1.5rem;
+  }
+  .tiptap-shell .ProseMirror p { margin: 0.5em 0; }
+  .tiptap-shell .ProseMirror h1 { font-size: 2em; font-weight: 700; margin: 0.6em 0 0.3em; }
+  .tiptap-shell .ProseMirror h2 { font-size: 1.5em; font-weight: 600; margin: 0.5em 0 0.3em; }
+  .tiptap-shell .ProseMirror h3 { font-size: 1.2em; font-weight: 600; margin: 0.4em 0 0.3em; }
+  .tiptap-shell .ProseMirror ul, .tiptap-shell .ProseMirror ol { padding-left: 1.5em; margin: 0.5em 0; }
+  .tiptap-shell .ProseMirror ul { list-style: disc; }
+  .tiptap-shell .ProseMirror ol { list-style: decimal; }
+  .tiptap-shell .ProseMirror blockquote {
+    border-left: 3px solid hsl(var(--primary));
+    padding-left: 1em;
+    color: hsl(var(--muted-foreground));
+    margin: 0.6em 0;
+  }
+  .tiptap-shell .ProseMirror code {
+    background: hsl(var(--muted));
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.9em;
+  }
+  .tiptap-shell .ProseMirror pre {
+    background: hsl(var(--muted));
+    padding: 0.8em 1em;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 0.6em 0;
+  }
+  .tiptap-shell .ProseMirror pre code { background: transparent; padding: 0; }
+  .tiptap-shell .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0.5em; }
+  .tiptap-shell .ProseMirror ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; }
+  .tiptap-shell .ProseMirror mark { padding: 0 0.15em; border-radius: 2px; }
+  .tiptap-shell .ProseMirror a { color: hsl(var(--primary)); text-decoration: underline; }
+}
+
+/* Container invisível usado para renderizar DOCX antes de virar PDF.
+   Precisa de fundo branco e cores próprias do Word (imune ao tema escuro). */
+.docx-render-host {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  z-index: -1;
+  width: 900px;
+  background: #ffffff;
+  color: #000000;
+  color-scheme: light;
+  pointer-events: none;
+}
+.docx-render-host * {
+  color-scheme: light;
+}
+.docx-render-host .docx-wrapper {
+  background: #ffffff;
+  padding: 0;
+}
+.docx-render-host section.docx {
+  background: #ffffff;
+  box-shadow: none;
+  margin: 0;
+}
