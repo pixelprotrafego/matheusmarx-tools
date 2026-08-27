@@ -52,19 +52,29 @@ export async function checkIpLimit(
   }
 }
 
-const ALLOWED_ORIGINS = [
-  "https://tools.matheusmarx.com.br",
-  "https://matheusmarxtools.lovable.app",
-];
-const ALLOWED_ORIGIN_SUFFIXES = [".lovable.app", ".lovable.dev"];
+// Origens autorizadas a chamar as edge functions, configuradas pelo secret
+// ALLOWED_ORIGINS (lista separada por vírgula). Um item iniciado por "."
+// libera o domínio e seus subdomínios, ex: ".matheusmarx.com.br".
+//
+// Enquanto o secret não estiver definido a checagem fica desligada, para o
+// deploy de preview funcionar em domínio provisório. Defina-o ao publicar no
+// domínio definitivo:
+//
+//   supabase secrets set ALLOWED_ORIGINS=https://tools.matheusmarx.com.br
+const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
+  .split(",")
+  .map((o) => o.trim().toLowerCase())
+  .filter(Boolean);
 
 export function isAllowedOrigin(req: Request): boolean {
+  if (ALLOWED_ORIGINS.length === 0) return true; // checagem desligada
   const origin = req.headers.get("origin");
-  if (!origin) return true; // server-to-server, no browser context
-  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  if (!origin) return true; // server-to-server, sem contexto de navegador
+  const normalized = origin.toLowerCase();
+  if (ALLOWED_ORIGINS.includes(normalized)) return true;
   try {
-    const host = new URL(origin).hostname;
-    return ALLOWED_ORIGIN_SUFFIXES.some((s) => host.endsWith(s));
+    const host = new URL(normalized).hostname;
+    return ALLOWED_ORIGINS.some((a) => a.startsWith(".") && (host === a.slice(1) || host.endsWith(a)));
   } catch {
     return false;
   }

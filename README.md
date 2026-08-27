@@ -1,73 +1,79 @@
-# Welcome to your Lovable project
+# Matheus Marx Tools
 
-## Project info
+Hub de ferramentas utilitárias que rodam **inteiramente no navegador**. Nenhum
+arquivo do usuário sai da máquina dele: conversões, edições e cálculos acontecem
+localmente, via WebAssembly e APIs nativas do navegador.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+Produção: <https://tools.matheusmarx.com.br/>
 
-## How can I edit this code?
+## Ferramentas
 
-There are several ways of editing your application.
+| Grupo | O que faz |
+| --- | --- |
+| Áudio & Voz | Transcrição de áudio e texto para fala |
+| Notepad & Desenho | Bloco de notas com formatação rica e prancheta de desenho livre |
+| Calculadora & Conversões | Calculadora científica e conversor de unidades |
+| Conversão de Arquivos & Mídia | PDF ↔ DOCX/XLSX, HEIC/WEBP/AVIF, GIF → MP4, MP4/MKV/WEBM, MP3/WAV/FLAC/OPUS, CSV ↔ JSON ↔ YAML |
+| Ferramentas PDF | Unir, separar, rotacionar, comprimir, marca d'água, reordenar, achatar, extrair imagens |
+| Edição de Imagem & Vídeo | Redimensionar, comprimir, remover fundo, cortar, unir, extrair frames e áudio |
+| Privacidade & Utilitários | QR Code, senhas, hashes, Base64, JSON, limpeza de metadados, esteganografia |
 
-**Use Lovable**
+## Stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- **Vite** + **React 18** + **TypeScript**
+- **Tailwind CSS** + **shadcn/ui** (Radix)
+- **pdf-lib** / **pdf.js** — manipulação e leitura de PDF
+- **ffmpeg.wasm** — áudio e vídeo
+- **SheetJS**, **mammoth**, **docx**, **docx-preview** — arquivos Office
+- **fabric** — prancheta de desenho
+- **TipTap** — editor de texto rico
+- **@imgly/background-removal** — remoção de fundo por modelo local
 
-Changes made via Lovable will be committed automatically to this repo.
+## Rodando localmente
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+Requer Node.js 20+.
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+npm install
+npm run dev      # http://localhost:8080
 ```
 
-**Edit a file directly in GitHub**
+Outros comandos:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```sh
+npm run build    # build de produção em dist/
+npm run preview  # serve o build localmente
+npm run lint     # eslint
+npm test         # vitest
+```
 
-**Use GitHub Codespaces**
+## Variáveis de ambiente
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Copie `.env.example` para `.env` e preencha conforme necessário.
 
-## What technologies are used for this project?
+| Variável | Obrigatória | Para que serve |
+| --- | --- | --- |
+| `VITE_ALLOWED_HOSTS` | não | Trava de domínio. Lista de hostnames separados por vírgula onde a aplicação pode rodar. Vazio = trava desligada. Um item iniciado por `.` libera o domínio e seus subdomínios. |
+| `VITE_SUPABASE_URL` | sim¹ | URL do projeto Supabase |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | sim¹ | Chave publishable (anon) do Supabase |
+| `VITE_SUPABASE_PROJECT_ID` | sim¹ | ID do projeto Supabase |
 
-This project is built with:
+¹ Necessárias apenas para as duas ferramentas de Áudio & Voz, que são as únicas
+que dependem de servidor. Todo o resto funciona sem nenhuma configuração.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Backend
 
-## How can I deploy this project?
+As ferramentas de **transcrição de áudio** e **texto para fala** são a única
+exceção ao processamento local: elas chamam edge functions em `supabase/functions/`,
+que por sua vez usam a API da Groq (Whisper e Orpheus).
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+| Secret | Onde | Para que serve |
+| --- | --- | --- |
+| `GROQ_API_KEY` | Supabase | Acesso à API da Groq |
+| `ALLOWED_ORIGINS` | Supabase | Origens autorizadas a chamar as functions. Vazio = checagem desligada. |
 
-## Can I connect a custom domain to my Lovable project?
+## Deploy
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+O build é estático (`dist/`) e pode ser servido por qualquer host de arquivos.
+Em produção, defina `VITE_ALLOWED_HOSTS` no ambiente de build e `ALLOWED_ORIGINS`
+nos secrets do Supabase para restringir o uso ao domínio oficial.

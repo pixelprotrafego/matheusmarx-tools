@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+/* As fontes Sora e DM Sans são carregadas por <link> no index.html.
+   Um @import aqui seria descartado no build, por vir depois das diretivas
+   do Tailwind — e o site sairia sem a tipografia da marca. */
 
 @layer base {
   :root {

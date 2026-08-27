@@ -1,22 +1,31 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-// Domínios permitidos. Qualquer outro hostname mostra tela de bloqueio.
-// Impede que terceiros clonem o front e usem em domínio próprio.
-const ALLOWED = [
-  "tools.matheusmarx.com.br",
-  "matheusmarxtools.lovable.app",
-  "lovable.dev",
-  "localhost",
-  "127.0.0.1",
-];
+// Trava de domínio: impede que terceiros clonem o front e sirvam em domínio próprio.
+//
+// DESLIGADA por padrão. Para religar, defina VITE_ALLOWED_HOSTS com a lista de
+// hostnames permitidos (separados por vírgula) no ambiente de build:
+//
+//   VITE_ALLOWED_HOSTS=tools.matheusmarx.com.br
+//
+// Hosts de desenvolvimento (localhost / 127.0.0.1) são sempre liberados, para a
+// trava não atrapalhar o `npm run dev`. Sem a variável, a aplicação roda em
+// qualquer domínio — que é o comportamento desejado durante o deploy de preview.
+const ALLOWED = (import.meta.env.VITE_ALLOWED_HOSTS ?? "")
+  .split(",")
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
+
+const DEV_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
 
 function isAllowed(host: string): boolean {
-  if (ALLOWED.includes(host)) return true;
-  // Subdomínios de preview da Lovable (ex: id-preview--*.lovable.app)
-  if (host.endsWith(".lovable.app")) return true;
-  // Editor e sandbox da Lovable (lovable.dev, *.sandbox.lovable.dev, etc.)
-  if (host.endsWith(".lovable.dev")) return true;
-  return false;
+  // Lista vazia = trava desligada.
+  if (ALLOWED.length === 0) return true;
+  const h = host.toLowerCase();
+  if (DEV_HOSTS.includes(h)) return true;
+  // Entrada iniciada por "." libera o domínio e todos os seus subdomínios.
+  return ALLOWED.some((allowed) =>
+    allowed.startsWith(".") ? h === allowed.slice(1) || h.endsWith(allowed) : h === allowed,
+  );
 }
 
 const DomainGuard = ({ children }: { children: ReactNode }) => {

@@ -37,6 +37,15 @@ const DocxToPdf = () => {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Troca a URL do resultado revogando a anterior: sem isso cada nova conversão
+  // deixa o PDF antigo preso na memória até a aba ser fechada.
+  const replaceResultUrl = useCallback((url: string | null) => {
+    setResultUrl((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return url;
+    });
+  }, []);
+
   const convertFaithful = useCallback(async (arrayBuffer: ArrayBuffer): Promise<Blob> => {
     const host = document.createElement("div");
     host.className = "docx-render-host";
@@ -122,7 +131,7 @@ const DocxToPdf = () => {
     setLoading(true);
     setProgress(10);
     setStatus("Lendo o arquivo...");
-    setResultUrl(null);
+    replaceResultUrl(null);
     setError(null);
 
     try {
@@ -132,7 +141,7 @@ const DocxToPdf = () => {
         : await docxToPdfText(arrayBuffer, setProgress);
 
       setProgress(100);
-      setResultUrl(URL.createObjectURL(blob));
+      replaceResultUrl(URL.createObjectURL(blob));
       toast.success(selectedMode === "fiel" ? "PDF gerado com o layout original!" : "DOCX convertido (texto selecionável)!");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
@@ -142,18 +151,18 @@ const DocxToPdf = () => {
       setLoading(false);
       setStatus("");
     }
-  }, [convertFaithful]);
+  }, [convertFaithful, replaceResultUrl]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const f = e.dataTransfer.files[0];
-    if (f) { setFile(f); setResultUrl(null); setError(null); }
-  }, []);
+    if (f) { setFile(f); replaceResultUrl(null); setError(null); }
+  }, [replaceResultUrl]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) { setFile(f); setResultUrl(null); setError(null); }
+    if (f) { setFile(f); replaceResultUrl(null); setError(null); }
   };
 
   const downloadResult = () => {
@@ -165,9 +174,8 @@ const DocxToPdf = () => {
   };
 
   const reset = () => {
-    if (resultUrl) URL.revokeObjectURL(resultUrl);
     setFile(null);
-    setResultUrl(null);
+    replaceResultUrl(null);
     setProgress(0);
     setError(null);
     if (inputRef.current) inputRef.current.value = "";
@@ -268,7 +276,7 @@ const DocxToPdf = () => {
                   <Download className="w-4 h-4" />
                   Baixar PDF
                 </Button>
-                <Button variant="outline" onClick={() => { setResultUrl(null); setProgress(0); }} className="gap-2">
+                <Button variant="outline" onClick={() => { replaceResultUrl(null); setProgress(0); }} className="gap-2">
                   <RotateCcw className="w-4 h-4" /> Converter em outro modo
                 </Button>
               </div>
