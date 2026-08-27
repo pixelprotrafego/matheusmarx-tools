@@ -1,7 +1,7 @@
-# Preenchido automaticamente por `supabase link --project-ref <ref>`.
-# A ref é o identificador do projeto, visível na URL do painel:
+# Identificador do projeto, visível na URL do painel:
 # https://supabase.com/dashboard/project/<ref>
-project_id = ""
+# `supabase link --project-ref <ref>` reescreve este campo.
+project_id = "iggipiyrwikavzpcnziw"
 
 # Estas duas são chamadas sem sessão de usuário e validam o acesso por conta
 # própria: transcribe-audio confere a origem e o limite por IP, e

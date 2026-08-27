@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Credenciais de administração do banco. Diferente das chaves do .env, que são
+# públicas por natureza, o conteúdo daqui dá acesso total ao Postgres.
+.supabase-db-url
+.supabase-db-url.txt
+*.pgpass
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
