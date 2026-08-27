@@ -22,7 +22,7 @@ export default defineConfig(() => ({
       output: {
         manualChunks: {
           "pdf-vendor": ["pdf-lib", "pdfjs-dist"],
-          "office-vendor": ["xlsx", "mammoth", "docx", "docx-preview"],
+          "office-vendor": ["xlsx", "docx", "docx-preview"],
           "ffmpeg-vendor": ["@ffmpeg/ffmpeg", "@ffmpeg/util"],
           "editor-vendor": [
             "@tiptap/react",
@@ -35,8 +35,11 @@ export default defineConfig(() => ({
             "@tiptap/extension-highlight",
             "@tiptap/extension-task-list",
             "@tiptap/extension-task-item",
-            "turndown",
           ],
+          // Fora do editor-vendor de propósito: o turndown é usado tanto pelo
+          // Notepad quanto pela conversão HTML -> Markdown, e agrupá-lo com o
+          // TipTap faria a conversão baixar o editor inteiro sem precisar.
+          "turndown-vendor": ["turndown"],
           "canvas-vendor": ["fabric", "jspdf", "html2canvas"],
         },
       },

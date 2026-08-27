@@ -22,6 +22,11 @@ dist-ssr
 supabase/.temp/
 supabase/.branches/
 
+# Motor do ffmpeg servido pelo proprio dominio (~31 MB). Nao vai para o Git:
+# `scripts/copy-ffmpeg-core.mjs` recria a pasta a partir do node_modules antes
+# de cada `npm run dev` e `npm run build`.
+public/ffmpeg/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

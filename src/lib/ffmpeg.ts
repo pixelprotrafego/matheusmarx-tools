@@ -12,26 +12,53 @@ type LoadStrategy = {
   config?: Parameters<FFmpeg["load"]>[0];
 };
 
+/** Raiz do site, respeitando um eventual `base` configurado no Vite. */
+const BASE = import.meta.env.BASE_URL.endsWith("/")
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+
+/**
+ * Ordem de carregamento do motor de vídeo.
+ *
+ * O domínio próprio vem primeiro: o site promete que nada sai da máquina de
+ * quem usa, e buscar o motor num CDN de terceiros entrega o IP do visitante e
+ * impede o uso offline. Os arquivos são colocados em `public/ffmpeg/` por
+ * `scripts/copy-ffmpeg-core.mjs`, que roda antes do `dev` e do `build`.
+ *
+ * Os CDNs continuam como rede de segurança para o caso de a cópia falhar num
+ * deploy. Se preferir garantir que nunca haja requisição externa, basta apagar
+ * as duas últimas estratégias — o site passa a falhar de forma explícita em vez
+ * de recorrer a terceiros.
+ */
 const LOAD_STRATEGIES: LoadStrategy[] = [
+  {
+    name: "self-hosted",
+    config: {
+      classWorkerURL: `${BASE}ffmpeg/worker.js`,
+      coreURL: `${BASE}ffmpeg/ffmpeg-core.js`,
+      wasmURL: `${BASE}ffmpeg/ffmpeg-core.wasm`,
+    },
+  },
   {
     name: "bundled-worker-default",
   },
+  // Atenção: nada de `workerURL` aqui. O @ffmpeg/core 0.12.9 de thread única
+  // não publica `ffmpeg-core.worker.js`, então apontar para ele dava 404 e
+  // derrubava estas duas estratégias antes mesmo de tentarem carregar.
   {
-    name: "unpkg-explicit-worker",
+    name: "unpkg",
     config: {
       classWorkerURL: `https://unpkg.com/@ffmpeg/ffmpeg@${FFMPEG_PACKAGE_VERSION}/dist/esm/worker.js`,
       coreURL: `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd/ffmpeg-core.js`,
       wasmURL: `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd/ffmpeg-core.wasm`,
-      workerURL: `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd/ffmpeg-core.worker.js`,
     },
   },
   {
-    name: "jsdelivr-explicit-worker",
+    name: "jsdelivr",
     config: {
       classWorkerURL: `https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@${FFMPEG_PACKAGE_VERSION}/dist/esm/worker.js`,
       coreURL: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${CORE_VERSION}/dist/umd/ffmpeg-core.js`,
       wasmURL: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${CORE_VERSION}/dist/umd/ffmpeg-core.wasm`,
-      workerURL: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${CORE_VERSION}/dist/umd/ffmpeg-core.worker.js`,
     },
   },
 ];

@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Upload, ArrowRight, FileText, Image as ImageIcon, Braces, X } from "lucide-react";
+import { Upload, ArrowRight, ChevronDown, FileText, Image as ImageIcon, Braces, X } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   ACCEPTED_EXTENSIONS,
   FORMATS,
@@ -75,6 +76,9 @@ const ConverterPicker = ({ onChoose, hint }: Props) => {
   const [from, setFrom] = useState<FormatKey | null>(null);
   const [unsupported, setUnsupported] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  // A grade fica fechada: quem chega com um arquivo em mãos não precisa dela, e
+  // aberta ela empurrava o resto do site para bem abaixo da dobra.
+  const [browsing, setBrowsing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const acceptFile = useCallback((picked: File) => {
@@ -84,6 +88,8 @@ const ConverterPicker = ({ onChoose, hint }: Props) => {
       setUnsupported(picked.name);
       setFile(null);
       setFrom(null);
+      // A mensagem manda olhar os formatos aceitos, então a grade abre junto.
+      setBrowsing(true);
       return;
     }
 
@@ -171,13 +177,19 @@ const ConverterPicker = ({ onChoose, hint }: Props) => {
         </p>
       )}
 
-      <div className="space-y-6">
-        <div className="flex items-center gap-2">
+      <Collapsible open={browsing} onOpenChange={setBrowsing}>
+        <CollapsibleTrigger className="group flex w-full items-center gap-2">
           <div className="line-gold flex-1" />
-          <span className="text-sm font-medium text-muted-foreground">Ou escolha pelo formato de origem</span>
+          <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+            Ou escolha pelo formato de origem
+            <ChevronDown
+              className={`h-4 w-4 transition-transform duration-200 ${browsing ? "rotate-180" : ""}`}
+            />
+          </span>
           <div className="line-gold flex-1" />
-        </div>
+        </CollapsibleTrigger>
 
+        <CollapsibleContent className="space-y-6 pt-6">
         {GROUPS.map((group) => {
           const sources = FORMATS.filter(
             (f) => f.group === group.key && targetsFor(f.key).length > 0,
@@ -213,7 +225,8 @@ const ConverterPicker = ({ onChoose, hint }: Props) => {
             </section>
           );
         })}
-      </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 };
