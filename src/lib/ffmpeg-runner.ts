@@ -34,8 +34,8 @@ export async function runFFmpeg({
     throw err;
   } finally {
     for (const i of inputs) {
-      try { await ffmpeg.deleteFile(i.name); } catch {}
+      try { await ffmpeg.deleteFile(i.name); } catch { /* já removido */ }
     }
-    try { await ffmpeg.deleteFile(output); } catch {}
+    try { await ffmpeg.deleteFile(output); } catch { /* já removido */ }
   }
 }

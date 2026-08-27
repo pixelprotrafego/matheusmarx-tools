@@ -34,7 +34,7 @@ const QrGenerator = () => {
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1">
           <Label className="text-xs">Correção</Label>
-          <Select value={ecLevel} onValueChange={(v) => setEcLevel(v as any)}>
+          <Select value={ecLevel} onValueChange={(v) => setEcLevel(v as typeof ecLevel)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="L">L — 7%</SelectItem>

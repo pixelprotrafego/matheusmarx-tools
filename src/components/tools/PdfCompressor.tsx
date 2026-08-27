@@ -22,7 +22,7 @@ const PdfCompressor = () => {
   const recompressJpegStream = async (stream: PDFRawStream, q: number): Promise<Uint8Array | null> => {
     try {
       const raw = stream.contents;
-      const blob = new Blob([raw as any], { type: "image/jpeg" });
+      const blob = new Blob([raw.slice().buffer], { type: "image/jpeg" });
       const bmp = await createImageBitmap(blob).catch(() => null);
       if (!bmp) return null;
       const canvas = document.createElement("canvas");

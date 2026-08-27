@@ -16,7 +16,7 @@ interface Props {
   inputAccept: string;
 }
 
-function csvToJson(text: string): any[] {
+function csvToJson(text: string): Record<string, string>[] {
   const rows = text.split(/\r?\n/).filter(Boolean).map((r) => {
     // simple CSV parser supporting quoted fields
     const out: string[] = [];
@@ -34,11 +34,11 @@ function csvToJson(text: string): any[] {
   return rows.map((row) => Object.fromEntries(headers.map((h, i) => [h, row[i] ?? ""])));
 }
 
-function jsonToCsv(data: any): string {
-  const arr = Array.isArray(data) ? data : [data];
+function jsonToCsv(data: unknown): string {
+  const arr = (Array.isArray(data) ? data : [data]) as Record<string, unknown>[];
   if (!arr.length) return "";
-  const headers = Array.from(new Set(arr.flatMap((o) => Object.keys(o))));
-  const esc = (v: any) => {
+  const headers = Array.from(new Set(arr.flatMap((o) => Object.keys(o ?? {}))));
+  const esc = (v: unknown) => {
     const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
@@ -80,7 +80,7 @@ async function htmlToText(html: string): Promise<string> {
 async function htmlToMd(html: string): Promise<string> {
   html = await sanitize(html);
   // minimal: strip tags but keep headings/links/bold
-  let s = html
+  const s = html
     .replace(/<h1[^>]*>(.*?)<\/h1>/gi, "# $1\n")
     .replace(/<h2[^>]*>(.*?)<\/h2>/gi, "## $1\n")
     .replace(/<h3[^>]*>(.*?)<\/h3>/gi, "### $1\n")
@@ -112,7 +112,7 @@ async function convertText(text: string, from: TextFmt, to: TextFmt): Promise<st
 
   // text/doc family
   if (from === "md" && to === "html") return await sanitize(mdToHtml(text));
-  if (from === "md" && to === "txt") return text.replace(/[#*`>\-]/g, "").trim();
+  if (from === "md" && to === "txt") return text.replace(/[#*`>-]/g, "").trim();
   if (from === "html" && to === "md") return await htmlToMd(text);
   if (from === "html" && to === "txt") return await htmlToText(text);
   if (from === "txt" && to === "md") return text;

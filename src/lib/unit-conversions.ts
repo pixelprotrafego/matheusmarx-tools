@@ -14,6 +14,7 @@ export interface UnitDef {
 export interface Category {
   key: CategoryKey;
   label: string;
+  /** `id` da unidade de referência: é para ela que todo `factor` aponta. */
   base: string;
   units: UnitDef[];
 }
@@ -54,7 +55,7 @@ export const CATEGORIES: Category[] = [
     ],
   },
   {
-    key: "speed", label: "Velocidade", base: "m/s",
+    key: "speed", label: "Velocidade", base: "mps",
     units: [
       { id: "mps", label: "Metros/segundo (m/s)", factor: 1 },
       { id: "kmh", label: "Quilômetros/hora (km/h)", factor: 1 / 3.6 },
@@ -64,7 +65,7 @@ export const CATEGORIES: Category[] = [
     ],
   },
   {
-    key: "volume", label: "Volume", base: "L",
+    key: "volume", label: "Volume", base: "l",
     units: [
       { id: "ml", label: "Mililitro (ml)", factor: 0.001 },
       { id: "l", label: "Litro (l)", factor: 1 },
@@ -76,7 +77,7 @@ export const CATEGORIES: Category[] = [
     ],
   },
   {
-    key: "area", label: "Área", base: "m²",
+    key: "area", label: "Área", base: "m2",
     units: [
       { id: "mm2", label: "Milímetro² (mm²)", factor: 1e-6 },
       { id: "cm2", label: "Centímetro² (cm²)", factor: 1e-4 },

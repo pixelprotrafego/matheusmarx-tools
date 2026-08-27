@@ -31,7 +31,8 @@ const ImageResizer = () => {
       const out: { name: string; blob: Blob }[] = [];
       for (let i = 0; i < files.length; i++) {
         const img = await fileToImage(files[i]);
-        let w = width, h = height;
+        const w = width;
+        let h = height;
         if (keepRatio) {
           const ratio = img.naturalWidth / img.naturalHeight;
           h = Math.round(w / ratio);

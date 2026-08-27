@@ -56,7 +56,7 @@ const VideoResizer = () => {
       {file && (
         <div className="space-y-2">
           <Label>Resolução de saída</Label>
-          <Select value={res} onValueChange={(v: any) => setRes(v)}>
+          <Select value={res} onValueChange={(v) => setRes(v as typeof res)}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>{Object.keys(RES).map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
           </Select>

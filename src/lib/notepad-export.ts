@@ -1,5 +1,25 @@
 import { saveAs } from "file-saver";
 import type { Editor } from "@tiptap/react";
+import type { Paragraph as DocxParagraph, TextRun as DocxTextRun } from "docx";
+
+/** Um nó do documento JSON do TipTap, na forma em que este módulo o percorre. */
+interface TipTapNode {
+  type?: string;
+  text?: string;
+  marks?: { type: string; attrs?: { color?: string; fontFamily?: string } }[];
+  attrs?: { level?: number };
+  content?: TipTapNode[];
+}
+
+/** Propriedades de formatação que viram opções de TextRun no docx. */
+interface RunMarks {
+  bold?: boolean;
+  italics?: boolean;
+  underline?: Record<string, never>;
+  strike?: boolean;
+  font?: string;
+  color?: string;
+}
 
 export function toTxt(editor: Editor, filename = "nota.txt") {
   const blob = new Blob([editor.getText()], { type: "text/plain;charset=utf-8" });
@@ -37,7 +57,7 @@ export async function toPdf(el: HTMLElement, filename = "nota.pdf") {
   const ratio = canvas.width / canvas.height;
   const imgW = pageW - 48;
   const imgH = imgW / ratio;
-  let y = 24;
+  const y = 24;
   let remaining = imgH;
   // single image, paginated by slicing if needed
   if (imgH <= pageH - 48) {
@@ -58,10 +78,10 @@ export async function toPdf(el: HTMLElement, filename = "nota.pdf") {
 export async function toDocx(editor: Editor, filename = "nota.docx") {
   const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
   const json = editor.getJSON();
-  const paragraphs: any[] = [];
+  const paragraphs: DocxParagraph[] = [];
 
-  const runFromText = (node: any): any => {
-    const marks: any = {};
+  const runFromText = (node: TipTapNode): DocxTextRun => {
+    const marks: RunMarks = {};
     for (const m of node.marks ?? []) {
       if (m.type === "bold") marks.bold = true;
       if (m.type === "italic") marks.italics = true;
@@ -76,11 +96,11 @@ export async function toDocx(editor: Editor, filename = "nota.docx") {
     return new TextRun({ text: node.text ?? "", ...marks });
   };
 
-  const walk = (node: any) => {
+  const walk = (node: TipTapNode | undefined) => {
     if (!node) return;
     if (node.type === "heading") {
       const lvl = node.attrs?.level ?? 1;
-      const headingMap: Record<number, any> = {
+      const headingMap: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
         1: HeadingLevel.HEADING_1, 2: HeadingLevel.HEADING_2, 3: HeadingLevel.HEADING_3,
       };
       paragraphs.push(new Paragraph({

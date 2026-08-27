@@ -82,7 +82,7 @@ const Notepad = () => {
         toast.error(`Limite de ${MAX_CHARS.toLocaleString()} caracteres atingido`);
         return;
       }
-      try { localStorage.setItem(STORAGE_KEY, editor.getHTML()); } catch {}
+      try { localStorage.setItem(STORAGE_KEY, editor.getHTML()); } catch { /* storage cheio ou bloqueado */ }
     },
   });
 
@@ -92,7 +92,10 @@ const Notepad = () => {
 
   const setFontSizePx = (px: string) => {
     setFontSize(px);
-    (editor.chain().focus() as any).setFontSize(`${px}px`).run();
+    // setFontSize vem da extensão TextStyle, fora da tipagem base do chain().
+    (editor.chain().focus() as unknown as { setFontSize(v: string): { run(): void } })
+      .setFontSize(`${px}px`)
+      .run();
   };
 
   const wordCount = editor.getText().trim().split(/\s+/).filter(Boolean).length;
@@ -101,7 +104,7 @@ const Notepad = () => {
   const clear = () => {
     if (!confirm("Limpar todo o conteúdo? Essa ação não pode ser desfeita.")) return;
     editor.commands.clearContent();
-    try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* storage bloqueado */ }
     toast.success("Notepad limpo");
   };
 

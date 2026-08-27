@@ -89,7 +89,7 @@ const MarkdownToPdf = () => {
         if (!line.trim()) { listCounter = 0; y += 2; continue; }
 
         // Headings
-        let m = /^(#{1,6})\s+(.*)$/.exec(line);
+        const m = /^(#{1,6})\s+(.*)$/.exec(line);
         if (m) {
           const lvl = m[1].length;
           const sizes = [22, 18, 15, 13, 12, 11];
@@ -109,11 +109,16 @@ const MarkdownToPdf = () => {
           continue;
         }
         // Unordered list
-        let um = /^\s*[-*+]\s+(.*)$/.exec(line);
+        const um = /^\s*[-*+]\s+(.*)$/.exec(line);
         if (um) { writeLines("• " + stripMd(um[1]), { size: 11, gap: 1 }); continue; }
-        // Ordered list
-        let om = /^\s*(\d+)\.\s+(.*)$/.exec(line);
-        if (om) { listCounter += 1; writeLines(`${om[1]}. ${stripMd(om[2])}`, { size: 11, gap: 1 }); continue; }
+        // Ordered list. O Markdown renumera a lista a partir do primeiro item:
+        // "1. / 1. / 1." vira 1, 2, 3 — só o número de abertura é respeitado.
+        const om = /^\s*(\d+)\.\s+(.*)$/.exec(line);
+        if (om) {
+          listCounter = listCounter === 0 ? parseInt(om[1], 10) : listCounter + 1;
+          writeLines(`${listCounter}. ${stripMd(om[2])}`, { size: 11, gap: 1 });
+          continue;
+        }
         // Parágrafo
         writeLines(stripMd(line), { size: 11, gap: 2 });
 

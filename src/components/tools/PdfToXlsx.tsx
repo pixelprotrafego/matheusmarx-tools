@@ -42,7 +42,7 @@ const PdfToXlsx = () => {
 
         for (const item of textContent.items) {
           if (!("str" in item)) continue;
-          const y = (item as any).transform?.[5];
+          const y = item.transform?.[5];
           if (lastY !== null && y !== undefined && Math.abs(y - lastY) > 5) {
             if (currentLine.trim()) lines.push(currentLine.trim());
             currentLine = "";

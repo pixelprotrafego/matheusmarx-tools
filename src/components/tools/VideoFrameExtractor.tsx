@@ -38,15 +38,15 @@ const VideoFrameExtractor = () => {
       const code = await ffmpeg.exec(["-i", "in.mp4", "-vf", `fps=${fps}`, "frame-%04d.png"]);
       if (code !== 0) throw new Error(`FFmpeg código ${code}`);
       const list = await ffmpeg.listDir("/");
-      const frames = list.filter((f: any) => f.name.startsWith("frame-") && f.name.endsWith(".png"));
+      const frames = list.filter((f) => f.name.startsWith("frame-") && f.name.endsWith(".png"));
       const out: { name: string; blob: Blob }[] = [];
       for (const f of frames) {
         const data = await ffmpeg.readFile(f.name);
         const buf = (data as Uint8Array).slice().buffer;
         out.push({ name: f.name, blob: new Blob([buf], { type: "image/png" }) });
-        try { await ffmpeg.deleteFile(f.name); } catch {}
+        try { await ffmpeg.deleteFile(f.name); } catch { /* já removido */ }
       }
-      try { await ffmpeg.deleteFile("in.mp4"); } catch {}
+      try { await ffmpeg.deleteFile("in.mp4"); } catch { /* já removido */ }
       if (!out.length) throw new Error("Nenhum frame extraído");
       await downloadAsZip(out, `${file.name.replace(/\.[^.]+$/, "")}-frames.zip`);
       toast.success(`${out.length} frames extraídos`);

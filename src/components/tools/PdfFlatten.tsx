@@ -18,7 +18,7 @@ const PdfFlatten = () => {
     setLoading(true); setError(null);
     try {
       const pdf = await PDFDocument.load(await file.arrayBuffer());
-      try { pdf.getForm().flatten(); } catch {}
+      try { pdf.getForm().flatten(); } catch { /* PDF sem formulário: nada a achatar */ }
       const bytes = await pdf.save();
       downloadBlob(bytesToBlob(bytes, "application/pdf"),
         replaceExt(file.name, "pdf").replace(/\.pdf$/, ".flattened.pdf"));

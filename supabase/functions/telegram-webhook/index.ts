@@ -6,10 +6,45 @@ import {
 import { runCommand } from "../_shared/router.ts";
 import { groqTranscribe } from "../_shared/groq.ts";
 import { splitPdf, rotatePdf, pdfInfo, pdfToDocx } from "../_shared/pdf-ops.ts";
-import { convertImage, resizeImage, imageToPdf, detectFormat } from "../_shared/image-ops.ts";
+import { convertImage, resizeImage, imageToPdf } from "../_shared/image-ops.ts";
 import { docxToText, xlsxToText } from "../_shared/doc-ops.ts";
 import { setPending, takePending, hasPending } from "../_shared/pending.ts";
 import { putFile, getFile } from "../_shared/file-store.ts";
+
+/** Botão do teclado inline do Telegram. */
+interface InlineButton {
+  text: string;
+  callback_data: string;
+}
+
+/** Recorte do objeto Update que este webhook consome. */
+interface TelegramFile {
+  file_id: string;
+  mime_type?: string;
+  file_name?: string;
+  file_unique_id?: string;
+}
+
+interface TelegramMessage {
+  chat?: { id: number };
+  from?: { id?: number; username?: string };
+  text?: string;
+  voice?: TelegramFile;
+  audio?: TelegramFile;
+  document?: TelegramFile;
+  photo?: TelegramFile[];
+}
+
+interface TelegramUpdate {
+  update_id?: number;
+  message?: TelegramMessage;
+  edited_message?: TelegramMessage;
+  callback_query?: {
+    id: string;
+    data?: string;
+    message?: { chat?: { id: number } };
+  };
+}
 
 // Dedupe simples em memória (boot único da instância)
 const seen = new Set<number>();
@@ -122,7 +157,7 @@ async function fileTypeMenu(chatId: number, fileId: string, mime: string, filena
   } else {
     return {
       text: `Recebi <b>${escapeHtml(filename)}</b> (${mime || "tipo desconhecido"}).\nFormato ainda não suportado pelo bot.`,
-      keyboard: { inline_keyboard: [] as any[] },
+      keyboard: { inline_keyboard: [] as InlineButton[][] },
     };
   }
 
@@ -268,7 +303,7 @@ Deno.serve(async (req) => {
     return new Response("Server error", { status: 500 });
   }
 
-  let update: any;
+  let update: TelegramUpdate;
   try { update = await req.json(); } catch { return new Response("ok"); }
 
   if (typeof update.update_id === "number" && dedupe(update.update_id)) {
@@ -339,7 +374,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ ok: true }));
   } catch (e) {
     console.error("handler err:", e);
-    try { await tgSendMessage(chatId, `❌ Erro interno: ${e instanceof Error ? e.message : "desconhecido"}`); } catch {}
+    try { await tgSendMessage(chatId, `❌ Erro interno: ${e instanceof Error ? e.message : "desconhecido"}`); } catch { /* Telegram inacessível */ }
     return new Response(JSON.stringify({ ok: true }));
   }
 });

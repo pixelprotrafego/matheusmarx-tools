@@ -129,7 +129,7 @@ function readIFD(view: DataView, base: number, ifdOffset: number, little: boolea
     if (type === 2) {
       // ASCII
       const total = cnt;
-      let dataPos = total <= 4 ? valOffset : base + view.getUint32(valOffset, little);
+      const dataPos = total <= 4 ? valOffset : base + view.getUint32(valOffset, little);
       if (dataPos + total > view.byteLength) continue;
       const arr = new Uint8Array(view.buffer, view.byteOffset + dataPos, total);
       value = new TextDecoder().decode(arr).replace(/\0+$/g, "").trim();
@@ -522,10 +522,6 @@ async function scrubPdf(file: File): Promise<Blob> {
   doc.setModificationDate(epoch);
   const out = await doc.save({ useObjectStreams: true });
   return new Blob([out.slice().buffer], { type: "application/pdf" });
-}
-
-async function scrubHeic(file: File): Promise<Blob> {
-  return scrubHeicAs(file, "jpg");
 }
 
 async function scrubHeicAs(file: File, format: "jpg" | "png"): Promise<Blob> {

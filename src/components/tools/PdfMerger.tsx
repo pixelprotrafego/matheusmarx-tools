@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Upload, Download, Loader2, X, FileText, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Upload, Download, Loader2, FileText, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 import { PDFDocument } from "pdf-lib";
 import { saveAs } from "file-saver";

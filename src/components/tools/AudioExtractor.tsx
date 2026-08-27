@@ -49,7 +49,7 @@ const AudioExtractor = () => {
       {file && (
         <div className="space-y-2">
           <Label>Formato do áudio</Label>
-          <Select value={format} onValueChange={(v: any) => setFormat(v)}>
+          <Select value={format} onValueChange={(v) => setFormat(v as typeof format)}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="mp3">MP3</SelectItem>

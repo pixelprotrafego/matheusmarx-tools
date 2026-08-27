@@ -71,7 +71,7 @@ const Mp4Cutter = () => {
         throw new Error(`FFmpeg retornou código ${exitCode}`);
       }
 
-      let data: any;
+      let data: Awaited<ReturnType<typeof ffmpeg.readFile>>;
       try {
         data = await ffmpeg.readFile("output.mp4");
       } catch {
@@ -87,8 +87,8 @@ const Mp4Cutter = () => {
       toast.success("Vídeo cortado com sucesso!");
 
       // Cleanup virtual FS
-      try { await ffmpeg.deleteFile("input.mp4"); } catch {}
-      try { await ffmpeg.deleteFile("output.mp4"); } catch {}
+      try { await ffmpeg.deleteFile("input.mp4"); } catch { /* já removido */ }
+      try { await ffmpeg.deleteFile("output.mp4"); } catch { /* já removido */ }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
       console.error("Error cutting video:", err);

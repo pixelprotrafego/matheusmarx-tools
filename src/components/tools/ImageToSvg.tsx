@@ -29,8 +29,18 @@ async function imageToSvgEmbed(file: File): Promise<{ name: string; svg: string 
   return { name: file.name.replace(/\.(jpe?g|png|webp|gif|bmp)$/i, "") + ".svg", svg };
 }
 
+/** Superfície usada do imagetracerjs, que não publica tipos próprios. */
+interface ImageTracerApi {
+  imageToSVG(
+    url: string,
+    callback: (svg: string) => void,
+    options?: Record<string, unknown>,
+  ): void;
+}
+
 async function imageToSvgVector(file: File, numColors: number): Promise<{ name: string; svg: string }> {
-  const ImageTracer: any = (await import("imagetracerjs")).default ?? (await import("imagetracerjs"));
+  const mod = await import("imagetracerjs");
+  const ImageTracer = ((mod as { default?: unknown }).default ?? mod) as ImageTracerApi;
   const dataUrl = await fileToDataUrl(file);
   const svg: string = await new Promise((resolve, reject) => {
     ImageTracer.imageToSVG(

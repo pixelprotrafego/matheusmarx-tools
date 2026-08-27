@@ -31,7 +31,7 @@ const PdfToDocx = () => {
 
       const { Document, Packer, Paragraph, TextRun, HeadingLevel, PageBreak } = await import("docx");
 
-      const children: any[] = [];
+      const children: InstanceType<typeof Paragraph>[] = [];
 
       for (let i = 1; i <= totalPages; i++) {
         const page = await pdf.getPage(i);
@@ -42,7 +42,7 @@ const PdfToDocx = () => {
 
         for (const item of textContent.items) {
           if (!("str" in item)) continue;
-          const y = (item as any).transform?.[5];
+          const y = item.transform?.[5];
           if (lastY !== null && y !== undefined && Math.abs(y - lastY) > 5) {
             if (currentLine.trim()) lines.push(currentLine.trim());
             currentLine = "";

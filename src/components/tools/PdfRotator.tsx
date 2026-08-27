@@ -58,7 +58,7 @@ const PdfRotator = () => {
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Ângulo</Label>
-            <Select value={angle} onValueChange={(v: any) => setAngle(v)}>
+            <Select value={angle} onValueChange={(v) => setAngle(v as typeof angle)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="90">90° horário</SelectItem>

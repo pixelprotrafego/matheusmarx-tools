@@ -2,11 +2,19 @@
 // Não é à prova de bala — atacante determinado contorna.
 // Filtra Puppeteer/Playwright básico sem fricção pra usuário real.
 
+/** Campos não-padrão consultados na heurística, ausentes na tipagem do DOM. */
+interface BotSignals {
+  webdriver?: boolean;
+  userAgent?: string;
+  plugins?: { length: number };
+  languages?: readonly string[];
+}
+
 export function isLikelyBot(): boolean {
   if (typeof navigator === "undefined" || typeof window === "undefined") return false;
   let score = 0;
-  const nav = navigator as any;
-  const win = window as any;
+  const nav = navigator as Navigator & BotSignals;
+  const win = window as Window & { chrome?: unknown };
 
   if (nav.webdriver) score += 2;
   if (!win.chrome && /Chrome/.test(nav.userAgent ?? "")) score += 1;

@@ -62,7 +62,7 @@ const ImageCompressor = () => {
         <div className="space-y-4">
           <div className="space-y-2"><Label>Qualidade: {quality}%</Label><Slider value={[quality]} onValueChange={(v) => setQuality(v[0])} min={20} max={95} step={5} /></div>
           <div className="space-y-2"><Label>Formato</Label>
-            <Select value={format} onValueChange={(v: any) => setFormat(v)}>
+            <Select value={format} onValueChange={(v) => setFormat(v as typeof format)}>
               <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="jpeg">JPEG</SelectItem>

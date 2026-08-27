@@ -59,7 +59,7 @@ const VideoCompressor = () => {
       {file && (
         <div className="space-y-2">
           <Label>Qualidade</Label>
-          <Select value={preset} onValueChange={(v: any) => setPreset(v)}>
+          <Select value={preset} onValueChange={(v) => setPreset(v as typeof preset)}>
             <SelectTrigger className="w-full sm:w-72"><SelectValue /></SelectTrigger>
             <SelectContent>
               {Object.entries(PRESETS).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}

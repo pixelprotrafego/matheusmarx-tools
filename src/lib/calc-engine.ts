@@ -59,8 +59,10 @@ function tokenize(expr: string, fnNames: Set<string>): Tok[] {
       out.push({ t: "num", v: parseFloat(s.slice(i, j)) });
       i = j;
     } else if (/[a-zA-Z]/.test(c)) {
+      // Só letras: os espaços já foram removidos, então aceitar dígitos aqui
+      // faria "10 mod 3" virar o identificador "mod3".
       let j = i;
-      while (j < s.length && /[a-zA-Z0-9]/.test(s[j])) j++;
+      while (j < s.length && /[a-zA-Z]/.test(s[j])) j++;
       const name = s.slice(i, j).toLowerCase();
       if (name === "mod") out.push({ t: "op", v: "mod" });
       else if (fnNames.has(name)) out.push({ t: "fn", v: name });

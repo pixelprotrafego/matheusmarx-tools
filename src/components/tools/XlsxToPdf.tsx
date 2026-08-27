@@ -27,8 +27,10 @@ const XlsxToPdf = () => {
       setProgress(30);
 
       const { default: jsPDF } = await import("jspdf");
-      const autoTableMod: any = await import("jspdf-autotable");
-      const autoTable = autoTableMod.default ?? autoTableMod;
+      // O pacote expõe a função ora como default, ora como o próprio módulo,
+      // dependendo do interop CJS/ESM.
+      const autoTableMod = await import("jspdf-autotable");
+      const autoTable = autoTableMod.default ?? (autoTableMod as unknown as typeof autoTableMod.default);
 
       const pdf = new jsPDF("l", "mm", "a4");
       let firstSheet = true;

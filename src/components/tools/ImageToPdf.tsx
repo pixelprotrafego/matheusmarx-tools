@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Upload, Download, Loader2, X, GripVertical, Image as ImageIcon } from "lucide-react";
+import { Upload, Download, Loader2, X, GripVertical } from "lucide-react";
 import jsPDF from "jspdf";
 import { saveAs } from "file-saver";
 import { toast } from "sonner";

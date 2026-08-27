@@ -25,6 +25,9 @@ const VideoJoiner = () => {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  // Extensão do arquivo gerado: o modo rápido preserva o container original
+  // (mkv, webm, ts), o modo seguro sempre re-encoda para mp4.
+  const [resultExt, setResultExt] = useState("mp4");
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fastMode, setFastMode] = useState(false);
@@ -91,12 +94,13 @@ const VideoJoiner = () => {
       }
 
       let exitCode: number;
+      let outName: string;
 
       if (effectiveFast) {
         setStatusText("Concatenando (modo rápido, sem re-encode)...");
         const list = names.map((n) => `file '${n}'`).join("\n");
         await ffmpeg.writeFile("list.txt", new TextEncoder().encode(list));
-        const outName = `output.${allExts[0]}`;
+        outName = `output.${allExts[0]}`;
         exitCode = await ffmpeg.exec([
           "-f", "concat",
           "-safe", "0",
@@ -104,10 +108,7 @@ const VideoJoiner = () => {
           "-c", "copy",
           outName,
         ]);
-        if (exitCode === 0) {
-          (window as any).__joinerOut = outName;
-        }
-        try { await ffmpeg.deleteFile("list.txt"); } catch {}
+        try { await ffmpeg.deleteFile("list.txt"); } catch { /* já removido */ }
       } else {
         setStatusText("Concatenando e re-encodando (modo seguro)...");
         const args: string[] = [];
@@ -137,7 +138,7 @@ const VideoJoiner = () => {
           "output.mp4"
         );
         exitCode = await ffmpeg.exec(args);
-        (window as any).__joinerOut = "output.mp4";
+        outName = "output.mp4";
       }
 
       if (exitCode !== 0) {
@@ -148,8 +149,7 @@ const VideoJoiner = () => {
         );
       }
 
-      const outName: string = (window as any).__joinerOut || "output.mp4";
-      let data: any;
+      let data: Awaited<ReturnType<typeof ffmpeg.readFile>>;
       try {
         data = await ffmpeg.readFile(outName);
       } catch {
@@ -160,13 +160,13 @@ const VideoJoiner = () => {
       const blob = new Blob([data], { type: mimeMap[ext] || "video/mp4" });
       if (blob.size < 100) throw new Error("O arquivo gerado está vazio.");
       setResultUrl(URL.createObjectURL(blob));
-      (window as any).__joinerExt = ext;
+      setResultExt(ext);
       toast.success("Vídeos unidos com sucesso!");
 
       for (const n of names) {
-        try { await ffmpeg.deleteFile(n); } catch {}
+        try { await ffmpeg.deleteFile(n); } catch { /* já removido */ }
       }
-      try { await ffmpeg.deleteFile(outName); } catch {}
+      try { await ffmpeg.deleteFile(outName); } catch { /* já removido */ }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
       console.error("Error joining videos:", err);
@@ -181,10 +181,9 @@ const VideoJoiner = () => {
 
   const download = () => {
     if (!resultUrl) return;
-    const ext = (window as any).__joinerExt || "mp4";
     const link = document.createElement("a");
     link.href = resultUrl;
-    link.download = `videos-unidos.${ext}`;
+    link.download = `videos-unidos.${resultExt}`;
     link.click();
   };
 
