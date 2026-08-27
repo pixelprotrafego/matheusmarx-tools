@@ -1,5 +1,15 @@
 # Migrar para um Supabase próprio
 
+> **Se o PowerShell responder `O termo 'npm' não é reconhecido`**: o Node está
+> instalado, mas a janela do terminal foi aberta antes da instalação e não
+> enxergou o PATH atualizado. **Feche o terminal e abra outro** — se estiver no
+> VS Code, feche o VS Code inteiro. Confirme com `npm --version`. Para
+> destravar só a janela atual, sem reabrir:
+>
+> ```powershell
+> $env:Path = "C:\Program Files\nodejs;" + $env:Path
+> ```
+
 Passo a passo para sair do projeto Supabase provisionado pela Lovable e passar
 para um projeto na sua própria conta.
 
@@ -60,24 +70,31 @@ VITE_SUPABASE_URL="https://abcdefgh.supabase.co"
 
 ## 4. Criar as tabelas
 
-Instale o CLI do Supabase, se ainda não tiver:
+O CLI do Supabase roda por `npx`, sem precisar instalar nada:
 
 ```powershell
-npm install -g supabase
-```
-
-Depois, na pasta do projeto:
-
-```powershell
-supabase login
-supabase link --project-ref abcdefgh
-supabase db push
+npx supabase login
+npx supabase link --project-ref abcdefgh
+npx supabase db push
 ```
 
 O `link` pede a senha do banco (a do passo 1) e preenche o `project_id` em
 `supabase/config.toml` sozinho. O `db push` aplica
 `supabase/migrations/20260827000000_schema_inicial.sql`, que cria as três
 tabelas com as permissões corretas.
+
+> **Se o `db push` der "Connection timed out"**: em projetos novos o host
+> `db.<ref>.supabase.co` só atende por IPv6, e a maioria das conexões
+> domésticas não tem IPv6 de verdade. Use o **Session pooler**, que atende por
+> IPv4 — no painel, em **Connection string**, escolha *Session pooler* em vez
+> de *Direct connection*. O endereço tem outro formato, com o ref no nome do
+> usuário:
+>
+> ```
+> postgresql://postgres.abcdefgh:SENHA@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+> ```
+>
+> Passe essa string em `npx supabase db push --db-url "<string>"`.
 
 Confira em **Table Editor**: devem aparecer `ip_rate_limits`,
 `telegram_pending_files` e `telegram_pending_actions`. Só isso — as tabelas
@@ -88,20 +105,25 @@ aplicação e ficaram para trás de propósito.
 
 ## 5. Cadastrar os secrets
 
-Estes valores ficam no servidor e nunca chegam ao navegador:
+Estes valores ficam no servidor e nunca chegam ao navegador. O `--project-ref`
+evita depender do `link`, então nem a senha do banco é necessária aqui:
 
 ```powershell
-supabase secrets set GROQ_API_KEY=gsk_...
+npx supabase login
+npx supabase secrets set --project-ref abcdefgh "GROQ_API_KEY=gsk_..."
 ```
 
 A chave da Groq sai de <https://console.groq.com/keys>. É ela que paga a
 transcrição de áudio e a geração de voz.
 
+Sempre entre aspas: o token do Telegram tem dois-pontos, e sem aspas o
+PowerShell pode quebrar o argumento no lugar errado.
+
 Se for usar o bot do Telegram, também:
 
 ```powershell
-supabase secrets set TELEGRAM_BOT_TOKEN=123456789:AAH...
-supabase secrets set TELEGRAM_ALLOWED_CHAT_IDS=987654321
+npx supabase secrets set --project-ref abcdefgh "TELEGRAM_BOT_TOKEN=123456789:AAH..."
+npx supabase secrets set --project-ref abcdefgh "TELEGRAM_ALLOWED_CHAT_IDS=987654321"
 ```
 
 A seção 7 explica de onde vem cada um desses dois números.
@@ -109,7 +131,13 @@ A seção 7 explica de onde vem cada um desses dois números.
 Quando o site voltar ao domínio definitivo, acrescente:
 
 ```powershell
-supabase secrets set ALLOWED_ORIGINS=https://tools.matheusmarx.com.br
+npx supabase secrets set --project-ref abcdefgh "ALLOWED_ORIGINS=https://tools.matheusmarx.com.br"
+```
+
+Confira o que ficou cadastrado (mostra só os nomes, nunca os valores):
+
+```powershell
+npx supabase secrets list --project-ref abcdefgh
 ```
 
 ---
@@ -117,9 +145,9 @@ supabase secrets set ALLOWED_ORIGINS=https://tools.matheusmarx.com.br
 ## 6. Publicar as edge functions
 
 ```powershell
-supabase functions deploy transcribe-audio
-supabase functions deploy groq-tts
-supabase functions deploy telegram-webhook
+npx supabase functions deploy transcribe-audio --project-ref abcdefgh
+npx supabase functions deploy groq-tts --project-ref abcdefgh
+npx supabase functions deploy telegram-webhook --project-ref abcdefgh
 ```
 
 Teste a transcrição pelo site antes de seguir. Se falhar, veja o motivo em
