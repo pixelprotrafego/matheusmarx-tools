@@ -18,6 +18,10 @@ dist-ssr
 .supabase-db-url.txt
 *.pgpass
 
+# Arquivos de trabalho do CLI do Supabase
+supabase/.temp/
+supabase/.branches/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
