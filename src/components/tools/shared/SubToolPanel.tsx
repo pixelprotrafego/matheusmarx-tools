@@ -48,10 +48,11 @@ const SubToolPanel = ({ tools }: { tools: SubTool[] }) => {
                 <Icon className="w-5 h-5 text-primary" />
               </div>
               <div className="min-w-0">
-                <p className="font-heading font-medium text-foreground flex items-center gap-2">
+                {/* div, e não p: o Badge renderiza um div, que é HTML inválido dentro de <p>. */}
+                <div className="font-heading font-medium text-foreground flex items-center gap-2">
                   {t.title}
                   {t.isNew && <Badge variant="secondary" className="text-xs px-1.5 py-0">Novo</Badge>}
-                </p>
+                </div>
                 <p className="text-sm text-muted-foreground">{t.description}</p>
               </div>
             </CardContent>

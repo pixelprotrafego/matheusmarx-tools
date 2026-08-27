@@ -71,6 +71,38 @@ que por sua vez usam a API da Groq (Whisper e Orpheus).
 | --- | --- | --- |
 | `GROQ_API_KEY` | Supabase | Acesso à API da Groq |
 | `ALLOWED_ORIGINS` | Supabase | Origens autorizadas a chamar as functions. Vazio = checagem desligada. |
+| `TELEGRAM_BOT_TOKEN` | Supabase | Token do bot, para o webhook do Telegram |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | Supabase | Chat ids autorizados a usar o bot, separados por vírgula. Vazio = ninguém. |
+
+## Bot do Telegram
+
+O bot expõe as ferramentas pelo chat: `/calc`, `/conv`, `/qr`, `/senha`, `/tts`,
+além de transcrever áudios e oferecer um menu de ações ao receber PDF, imagem,
+DOCX ou XLSX. Ele fala direto com `api.telegram.org`.
+
+Deploy e configuração:
+
+```sh
+supabase functions deploy telegram-webhook
+supabase secrets set TELEGRAM_BOT_TOKEN=<token do @BotFather>
+supabase secrets set GROQ_API_KEY=<sua chave da Groq>
+
+# Descobrir seu chat id (o bot só responde a ids autorizados)
+$env:TELEGRAM_BOT_TOKEN = "<token>"
+npm run telegram chat-id
+supabase secrets set TELEGRAM_ALLOWED_CHAT_IDS=<seu chat id>
+
+# Registrar o webhook
+npm run telegram set https://<projeto>.supabase.co/functions/v1/telegram-webhook
+
+# Conferir
+npm run telegram status
+```
+
+O `secret_token` do webhook é derivado do próprio token do bot, então não
+precisa ser guardado: a edge function recalcula e compara a cada update.
+
+Limite herdado da Bot API: o bot só consegue baixar arquivos de até 20 MB.
 
 ## Deploy
 

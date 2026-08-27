@@ -6,6 +6,7 @@ import { Repeat, Wand2, ArrowLeft, FileStack, Type, Loader2, Palette, Calculator
 import SiteHeader from "@/components/site/SiteHeader";
 import Hero from "@/components/site/Hero";
 import SiteFooter from "@/components/site/SiteFooter";
+import ToolErrorBoundary from "@/components/ToolErrorBoundary";
 
 const ConvertersPanel = lazy(() => import("@/components/tools/ConvertersPanel"));
 const MediaEditPanel = lazy(() => import("@/components/tools/MediaEditPanel"));
@@ -163,15 +164,20 @@ const Tools = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Suspense fallback={<PanelFallback />}>
-                  {activeCluster === "voice-tools" && <VoiceToolsPanel />}
-                  {activeCluster === "creative-tools" && <CreativeToolsPanel />}
-                  {activeCluster === "calc-tools" && <CalcToolsPanel />}
-                  {activeCluster === "converters" && <ConvertersPanel />}
-                  {activeCluster === "pdf-tools" && <PdfToolsPanel />}
-                  {activeCluster === "media-edit" && <MediaEditPanel />}
-                  {activeCluster === "text-tools" && <TextToolsPanel />}
-                </Suspense>
+                <ToolErrorBoundary
+                  area={clusters.find((c) => c.key === activeCluster)?.title}
+                  resetKey={activeCluster}
+                >
+                  <Suspense fallback={<PanelFallback />}>
+                    {activeCluster === "voice-tools" && <VoiceToolsPanel />}
+                    {activeCluster === "creative-tools" && <CreativeToolsPanel />}
+                    {activeCluster === "calc-tools" && <CalcToolsPanel />}
+                    {activeCluster === "converters" && <ConvertersPanel />}
+                    {activeCluster === "pdf-tools" && <PdfToolsPanel />}
+                    {activeCluster === "media-edit" && <MediaEditPanel />}
+                    {activeCluster === "text-tools" && <TextToolsPanel />}
+                  </Suspense>
+                </ToolErrorBoundary>
               </CardContent>
             </Card>
           </div>

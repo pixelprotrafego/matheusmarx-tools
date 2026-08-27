@@ -17,7 +17,9 @@ const FORMATS = [
 ];
 const MAX = 4000;
 
-const FN_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/groq-tts`;
+const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const FN_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/groq-tts`;
 
 const TextToSpeech = () => {
   const [text, setText] = useState("");
@@ -28,6 +30,12 @@ const TextToSpeech = () => {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
 
   const generate = async () => {
+    if (!PROJECT_ID || !ANON_KEY) {
+      toast.error("Geração de voz não configurada", {
+        description: "Faltam VITE_SUPABASE_PROJECT_ID e VITE_SUPABASE_PUBLISHABLE_KEY no build.",
+      });
+      return;
+    }
     const t = text.trim();
     if (!t) { toast.error("Digite um texto"); return; }
     if (t.length > MAX) { toast.error(`Máximo ${MAX} caracteres`); return; }
@@ -42,8 +50,8 @@ const TextToSpeech = () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          apikey: ANON_KEY,
+          Authorization: `Bearer ${ANON_KEY}`,
         },
         body: JSON.stringify({ text: t, voice, format }),
       });

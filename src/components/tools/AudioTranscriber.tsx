@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import Dropzone from "./shared/Dropzone";
 import { X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { getSupabase } from "@/integrations/supabase/client";
 import { consume, formatReset } from "@/lib/rate-limit";
 import { downloadBlob } from "@/lib/download";
 
@@ -210,7 +210,7 @@ const AudioTranscriber = () => {
       form.append("language", lang);
       form.append("response_format", withTimestamps ? "verbose_json" : "json");
 
-      const { data, error } = await supabase.functions.invoke("transcribe-audio", {
+      const { data, error } = await getSupabase().functions.invoke("transcribe-audio", {
         body: form,
       });
       if (error) throw error;
