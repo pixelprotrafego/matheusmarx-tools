@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { Upload, Download, Loader2, X, FileText, AlertTriangle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { planSlices, type Block } from "@/lib/docx-pagination";
+import { hasMsoPosition, isFullBleed, parseMsoPosition, resolveMsoOffset } from "@/lib/docx-vml-position";
 import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 /** Um pixel de CSS vale 1/96 de polegada — a régua para converter px em mm. */
@@ -47,6 +48,67 @@ const waitForAssets = async (host: HTMLElement) => {
 const declaredPageHeight = (section: HTMLElement): number => {
   const raw = parseFloat(getComputedStyle(section).minHeight);
   return Number.isFinite(raw) && raw > 0 ? raw : section.getBoundingClientRect().height;
+};
+
+/**
+ * Recoloca as formas VML de fundo desta seção.
+ *
+ * Modelos corporativos desenham o fundo da página com uma forma maior que a
+ * folha, centralizada, para sangrar pelas bordas. O `docx-preview` copia o
+ * estilo do VML literalmente para um `<svg>`, e o navegador descarta as
+ * propriedades `mso-position-*` que fazem esse alinhamento — a forma ia parar
+ * na origem da caixa de conteúdo, deslocada pelas margens, e o `overflow:hidden`
+ * cortava o resto, deixando uma faixa da página sem fundo nenhum.
+ */
+const fixVmlBackgrounds = (section: HTMLElement) => {
+  const rect = section.getBoundingClientRect();
+  const estilo = getComputedStyle(section);
+  const padLeft = parseFloat(estilo.paddingLeft) || 0;
+  const padRight = parseFloat(estilo.paddingRight) || 0;
+  const padTop = parseFloat(estilo.paddingTop) || 0;
+  const padBottom = parseFloat(estilo.paddingBottom) || 0;
+
+  const page = { width: rect.width, height: rect.height };
+  const content = {
+    left: padLeft,
+    top: padTop,
+    width: rect.width - padLeft - padRight,
+    height: rect.height - padTop - padBottom,
+  };
+
+  for (const svg of Array.from(section.querySelectorAll<SVGElement>("svg[style]"))) {
+    const styleText = svg.getAttribute("style") ?? "";
+    if (!hasMsoPosition(styleText)) continue;
+
+    const shapeRect = svg.getBoundingClientRect();
+    const shape = { width: shapeRect.width, height: shapeRect.height };
+    if (!(shape.width > 0 && shape.height > 0)) continue;
+
+    const mso = parseMsoPosition(styleText);
+
+    // Fundo de página sangrado se ancora na folha, não na área de texto —
+    // mesmo quando o Word declarou a referência como "margin" ou "column".
+    const sangrado = isFullBleed(shape, page);
+    const { left, top } = resolveMsoOffset({
+      mso: sangrado
+        ? { ...mso, horizontalRelative: "page", verticalRelative: "page" }
+        : mso,
+      shape,
+      page,
+      content,
+    });
+
+    // O elemento é `position:absolute` dentro da seção, cuja caixa de
+    // referência começa depois do padding: por isso o desconto aqui.
+    if (left !== null) {
+      svg.style.left = `${left - padLeft}px`;
+      svg.style.marginLeft = "0";
+    }
+    if (top !== null) {
+      svg.style.top = `${top - padTop}px`;
+      svg.style.marginTop = "0";
+    }
+  }
 };
 
 /**
@@ -151,6 +213,11 @@ const DocxToPdf = () => {
 
       const sections = Array.from(host.querySelectorAll<HTMLElement>("section.docx"));
       if (!sections.length) throw new Error("Não foi possível renderizar as páginas deste documento.");
+
+      // Antes de medir e rasterizar: o docx-preview posiciona as formas VML
+      // pelo estilo cru do Word, que o navegador não entende inteiro.
+      for (const section of sections) fixVmlBackgrounds(section);
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
 
       const tiles = planPages(sections);
       if (tiles.length > 60) {

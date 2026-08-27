@@ -78,9 +78,6 @@ O banco guarda apenas dados descartáveis: contadores de limite por IP e
 arquivos do Telegram aguardando uma ação, com validade de minutos. Nenhum
 conteúdo de usuário é armazenado.
 
-Para trocar de projeto Supabase, veja
-[docs/migrar-para-supabase-proprio.md](docs/migrar-para-supabase-proprio.md).
-
 ## Bot do Telegram
 
 O bot expõe as ferramentas pelo chat: `/calc`, `/conv`, `/qr`, `/senha`, `/tts`,

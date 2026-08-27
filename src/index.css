@@ -154,3 +154,14 @@
   box-shadow: none;
   margin: 0;
 }
+/* O docx-preview aplica `overflow-wrap: break-word` em todo span e
+   `hyphens: auto` no documento. Em texto justificado isso parte palavras no
+   meio ("anteriorm ente", "persp ectiva") — o Word nunca quebra assim, e a
+   conversão deixa de ser fiel. Aqui a palavra volta a ser indivisível. */
+.docx-render-host .docx {
+  hyphens: manual;
+}
+.docx-render-host .docx span {
+  overflow-wrap: normal;
+  word-break: normal;
+}
