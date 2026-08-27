@@ -1,5 +1,11 @@
-project_id = "mzbehgvrvwkjhosoyylj"
+# Preenchido automaticamente por `supabase link --project-ref <ref>`.
+# A ref é o identificador do projeto, visível na URL do painel:
+# https://supabase.com/dashboard/project/<ref>
+project_id = ""
 
+# Estas duas são chamadas sem sessão de usuário e validam o acesso por conta
+# própria: transcribe-audio confere a origem e o limite por IP, e
+# telegram-webhook confere o secret enviado pelo Telegram no cabeçalho.
 [functions.transcribe-audio]
 verify_jwt = false
 

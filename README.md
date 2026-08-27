@@ -74,28 +74,39 @@ que por sua vez usam a API da Groq (Whisper e Orpheus).
 | `TELEGRAM_BOT_TOKEN` | Supabase | Token do bot, para o webhook do Telegram |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Supabase | Chat ids autorizados a usar o bot, separados por vírgula. Vazio = ninguém. |
 
+O banco guarda apenas dados descartáveis: contadores de limite por IP e
+arquivos do Telegram aguardando uma ação, com validade de minutos. Nenhum
+conteúdo de usuário é armazenado.
+
+Para trocar de projeto Supabase, veja
+[docs/migrar-para-supabase-proprio.md](docs/migrar-para-supabase-proprio.md).
+
 ## Bot do Telegram
 
 O bot expõe as ferramentas pelo chat: `/calc`, `/conv`, `/qr`, `/senha`, `/tts`,
 além de transcrever áudios e oferecer um menu de ações ao receber PDF, imagem,
 DOCX ou XLSX. Ele fala direto com `api.telegram.org`.
 
-Deploy e configuração:
+A configuração envolve **dois números diferentes**:
+
+- **`TELEGRAM_BOT_TOKEN`** — a senha do bot, entregue pelo `@BotFather`. Tem
+  dois-pontos no meio: `123456789:AAHdqTcvCH1...`
+- **`TELEGRAM_ALLOWED_CHAT_IDS`** — o id da **sua conta pessoal** do Telegram,
+  que autoriza você a usar o bot. É só um número: `987654321`. Sem ele, o bot
+  ignora todo mundo em silêncio.
 
 ```sh
 supabase functions deploy telegram-webhook
 supabase secrets set TELEGRAM_BOT_TOKEN=<token do @BotFather>
 supabase secrets set GROQ_API_KEY=<sua chave da Groq>
 
-# Descobrir seu chat id (o bot só responde a ids autorizados)
+# Descobrir o id da sua conta (mande uma mensagem ao bot antes)
 $env:TELEGRAM_BOT_TOKEN = "<token>"
 npm run telegram chat-id
-supabase secrets set TELEGRAM_ALLOWED_CHAT_IDS=<seu chat id>
+supabase secrets set TELEGRAM_ALLOWED_CHAT_IDS=<o id da sua conta>
 
-# Registrar o webhook
-npm run telegram set https://<projeto>.supabase.co/functions/v1/telegram-webhook
-
-# Conferir
+# Registrar o webhook e conferir
+npm run telegram set https://<ref>.supabase.co/functions/v1/telegram-webhook
 npm run telegram status
 ```
 

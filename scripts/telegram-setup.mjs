@@ -21,7 +21,12 @@ const token = process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_API_KEY;
 
 if (!token) {
   console.error("Erro: defina TELEGRAM_BOT_TOKEN no ambiente antes de rodar.");
-  console.error('PowerShell:  $env:TELEGRAM_BOT_TOKEN = "123456:ABC..."');
+  console.error();
+  console.error("É o token do BOT, que o @BotFather entrega quando você cria o bot.");
+  console.error("Tem números, dois-pontos e uma sequência longa de letras:");
+  console.error("  123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw");
+  console.error();
+  console.error('PowerShell:  $env:TELEGRAM_BOT_TOKEN = "123456789:AAH..."');
   process.exit(1);
 }
 
@@ -106,7 +111,11 @@ async function chatId() {
   }
   const updates = await call("getUpdates", { limit: 20 });
   if (!updates.length) {
-    console.log("Nenhuma mensagem recente. Mande qualquer mensagem ao bot e rode de novo.");
+    const me = await call("getMe");
+    console.log("Nenhuma mensagem recente.");
+    console.log();
+    console.log(`Abra o Telegram, procure por @${me.username} e mande qualquer`);
+    console.log('mensagem para o bot (um "oi" basta). Depois rode este comando de novo.');
     return;
   }
   const seen = new Map();
@@ -115,10 +124,15 @@ async function chatId() {
     const chat = msg?.chat;
     if (chat) seen.set(chat.id, chat.username ?? chat.title ?? chat.first_name ?? "");
   }
-  console.log("Chat ids encontrados:");
+  console.log("Chat ids que falaram com o bot:");
   for (const [id, name] of seen) console.log(`  ${id}  ${name}`);
   console.log();
-  console.log("Use em TELEGRAM_ALLOWED_CHAT_IDS (separe por vírgula se for mais de um).");
+  console.log("Este número identifica a SUA conta do Telegram, não o bot — é ele");
+  console.log("que autoriza você a usar o bot. Cadastre no Supabase:");
+  const first = [...seen.keys()][0];
+  console.log(`  supabase secrets set TELEGRAM_ALLOWED_CHAT_IDS=${first}`);
+  console.log();
+  console.log("Para liberar mais de uma pessoa, separe os ids por vírgula.");
 }
 
 async function remove() {
