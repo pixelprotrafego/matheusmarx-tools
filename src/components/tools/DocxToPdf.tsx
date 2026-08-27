@@ -7,7 +7,8 @@ import { docxToPdfText } from "@/lib/docx-to-pdf-text";
 
 type Mode = "fiel" | "texto";
 
-const A4 = { w: 210, h: 297 };
+/** Um pixel de CSS vale 1/96 de polegada — a régua para converter px em mm. */
+const CSS_DPI = 96;
 
 const waitForAssets = async (host: HTMLElement) => {
   try { await (document as Document & { fonts?: FontFaceSet }).fonts?.ready; } catch { /* noop */ }
@@ -83,37 +84,43 @@ const DocxToPdf = () => {
       const html2canvas = (await import("html2canvas")).default;
       const { default: jsPDF } = await import("jspdf");
 
+      // Documentos longos rasterizados em alta escala estouram a memória da
+      // aba, então a nitidez cede um pouco conforme a contagem de páginas.
+      const scale = pages.length <= 20 ? 3 : pages.length <= 60 ? 2.5 : 2;
+
       let pdf: import("jspdf").jsPDF | null = null;
 
       for (let i = 0; i < pages.length; i++) {
         setStatus(`Convertendo página ${i + 1} de ${pages.length}...`);
         setProgress(20 + Math.round(((i + 1) / pages.length) * 70));
 
-        const canvas = await html2canvas(pages[i], {
-          scale: 2,
+        const page = pages[i];
+
+        // Tamanho real da página que o Word declarou, e não A4 presumido:
+        // forçar A4 encolhe e centraliza documentos em Carta, ofício ou A5,
+        // que era a causa do resultado "não bate com o original".
+        const rect = page.getBoundingClientRect();
+        const wMm = (rect.width * 25.4) / CSS_DPI;
+        const hMm = (rect.height * 25.4) / CSS_DPI;
+
+        const canvas = await html2canvas(page, {
+          scale,
           backgroundColor: "#ffffff",
           useCORS: true,
           logging: false,
         });
 
-        const landscape = canvas.width > canvas.height;
-        const pw = landscape ? A4.h : A4.w;
-        const ph = landscape ? A4.w : A4.h;
-
+        const orientation = wMm > hMm ? "landscape" : "portrait";
         if (!pdf) {
-          pdf = new jsPDF({ unit: "mm", format: "a4", orientation: landscape ? "landscape" : "portrait", compress: true });
+          pdf = new jsPDF({ unit: "mm", format: [wMm, hMm], orientation, compress: true });
         } else {
-          pdf.addPage("a4", landscape ? "landscape" : "portrait");
+          pdf.addPage([wMm, hMm], orientation);
         }
 
-        // encaixa mantendo proporção
-        const ratio = Math.min(pw / canvas.width, ph / canvas.height);
-        const w = canvas.width * ratio;
-        const h = canvas.height * ratio;
-        const x = (pw - w) / 2;
-        const y = (ph - h) / 2;
-
-        pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", x, y, w, h, undefined, "FAST");
+        // PNG, não JPEG: o JPEG comprime em blocos de 8x8 e cria halos ao redor
+        // das letras, que é o que deixava o texto sujo. PNG é sem perdas, e o
+        // deflate do próprio PDF dá conta do tamanho em página de texto.
+        pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, wMm, hMm, undefined, "SLOW");
 
         // libera memória
         canvas.width = 0;

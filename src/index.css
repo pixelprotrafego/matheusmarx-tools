@@ -133,7 +133,10 @@
   top: 0;
   left: -10000px;
   z-index: -1;
-  width: 900px;
+  /* max-content, e não largura fixa: uma página A3 ou em paisagem é mais larga
+     que 900px e seria espremida, alterando a quebra de linha do documento. */
+  width: max-content;
+  min-width: 900px;
   background: #ffffff;
   color: #000000;
   color-scheme: light;

@@ -15,6 +15,15 @@ interface PageImage {
   pageNumber: number;
 }
 
+/** O PDF mede em pontos: 72 pt por polegada é a escala 1:1 do documento. */
+const PDF_BASE_DPI = 72;
+
+const DPI_OPTIONS = [
+  { value: 150, label: "150 DPI", hint: "Leitura em tela" },
+  { value: 300, label: "300 DPI", hint: "Impressão" },
+  { value: 600, label: "600 DPI", hint: "Máxima — arquivos grandes" },
+] as const;
+
 const PdfToImage = () => {
   const [file, setFile] = useState<File | null>(null);
   const [pages, setPages] = useState<PageImage[]>([]);
@@ -22,6 +31,7 @@ const PdfToImage = () => {
   const [progress, setProgress] = useState(0);
   const [format, setFormat] = useState<"png" | "jpeg">("png");
   const [quality, setQuality] = useState([90]);
+  const [dpi, setDpi] = useState<number>(150);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +56,7 @@ const PdfToImage = () => {
 
       for (let i = 1; i <= totalPages; i++) {
         const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2 });
+        const viewport = page.getViewport({ scale: dpi / PDF_BASE_DPI });
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
@@ -66,7 +76,7 @@ const PdfToImage = () => {
     } finally {
       setLoading(false);
     }
-  }, [format, quality]);
+  }, [format, quality, dpi]);
 
   const handleFileSelect = useCallback((selectedFile: File) => {
     setFile(selectedFile);
@@ -174,10 +184,31 @@ const PdfToImage = () => {
               </div>
             </div>
             <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Resolução</label>
+              <div className="flex gap-2">
+                {DPI_OPTIONS.map((d) => (
+                  <Button
+                    key={d.value}
+                    variant={dpi === d.value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setDpi(d.value)}
+                    title={d.hint}
+                  >
+                    {d.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* A qualidade só existe em JPEG: toDataURL ignora o parâmetro em PNG,
+              e o controle dava a impressão falsa de estar surtindo efeito. */}
+          {format === "jpeg" && (
+            <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Qualidade: {quality[0]}%</label>
               <Slider value={quality} onValueChange={setQuality} min={10} max={100} step={5} />
             </div>
-          </div>
+          )}
 
           {/* Convert Button */}
           <Button

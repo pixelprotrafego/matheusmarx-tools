@@ -6,6 +6,7 @@ import jsPDF from "jspdf";
 import { saveAs } from "file-saver";
 import { toast } from "sonner";
 import { BATCH_LIMITS, checkBatch } from "@/lib/validate-file";
+import { fileToImage, drawToCanvas } from "@/lib/canvas-utils";
 
 interface UploadedImage {
   id: string;
@@ -91,22 +92,31 @@ const ImageToPdf = () => {
     setLoading(true);
 
     try {
-      const first = images[0];
-      const pdf = new jsPDF({
-        orientation: first.width > first.height ? "landscape" : "portrait",
-        unit: "px",
-        format: [first.width, first.height],
-      });
+      let pdf: jsPDF | null = null;
 
-      for (let i = 0; i < images.length; i++) {
-        const img = images[i];
-        if (i > 0) {
-          pdf.addPage([img.width, img.height], img.width > img.height ? "landscape" : "portrait");
+      for (const img of images) {
+        const orientation = img.width > img.height ? "landscape" : "portrait";
+        if (!pdf) {
+          pdf = new jsPDF({ orientation, unit: "px", format: [img.width, img.height] });
+        } else {
+          pdf.addPage([img.width, img.height], orientation);
         }
-        pdf.addImage(img.preview, "JPEG", 0, 0, img.width, img.height);
+
+        if (img.file.type === "image/png") {
+          // PDF não tem canal alfa: um PNG transparente entregue direto sai com
+          // fundo preto. Achatar sobre branco antes é o que preserva a aparência.
+          const el = await fileToImage(img.file);
+          const canvas = drawToCanvas(el, img.width, img.height, "#ffffff");
+          pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, img.width, img.height);
+          canvas.width = 0;
+          canvas.height = 0;
+        } else {
+          // Foto já em JPEG: reaproveita os bytes originais, sem recomprimir.
+          pdf.addImage(img.preview, "JPEG", 0, 0, img.width, img.height);
+        }
       }
 
-      const blob = pdf.output("blob");
+      const blob = pdf!.output("blob");
       saveAs(blob, "imagens-convertidas.pdf");
     } catch (error) {
       console.error("Error generating PDF:", error);
