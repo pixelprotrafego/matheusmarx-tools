@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Upload, Download, Loader2, X, FileText, AlertTriangle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 const MarkdownToPdf = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -150,6 +151,8 @@ const MarkdownToPdf = () => {
       .replace(/_(.+?)_/g, "$1")
       .replace(/`([^`]+)`/g, "$1");
   }
+
+  useAdoptDroppedFile(processFile);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

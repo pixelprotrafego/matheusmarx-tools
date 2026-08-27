@@ -6,6 +6,7 @@ import { Upload, Download, Loader2 } from "lucide-react";
 import { saveAs } from "file-saver";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
+import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 async function svgToCanvas(file: File, scale: number) {
   const text = await file.text();
@@ -60,6 +61,8 @@ const SvgToPdf = () => {
     }
     setFile(f);
   };
+
+  useAdoptDroppedFile(onPick);
 
   const convert = async () => {
     if (!file) return;

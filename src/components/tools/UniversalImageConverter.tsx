@@ -10,6 +10,7 @@ import { downloadBlob, downloadAsZip, replaceExt } from "@/lib/download";
 import { rasterizeSvg } from "@/lib/svg-utils";
 import { BATCH_LIMITS, checkBatch } from "@/lib/validate-file";
 import { ImageIcon } from "lucide-react";
+import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 interface Props {
   inputAccept: string;
@@ -59,6 +60,8 @@ const UniversalImageConverter = ({
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  useAdoptDroppedFile((f) => setFiles([f]));
 
   const targetMime = outputMime ?? MIME_FOR_EXT[outputExt] ?? "image/png";
 

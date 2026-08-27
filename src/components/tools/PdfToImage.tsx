@@ -9,6 +9,7 @@ import JSZip from "jszip";
 import { toast } from "sonner";
 import { formatReset } from "@/lib/rate-limit";
 import { guard, guardMessage } from "@/lib/abuse-guard";
+import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 interface PageImage {
   dataUrl: string;
@@ -84,6 +85,8 @@ const PdfToImage = () => {
     setError(null);
     setProgress(0);
   }, []);
+
+  useAdoptDroppedFile(handleFileSelect);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

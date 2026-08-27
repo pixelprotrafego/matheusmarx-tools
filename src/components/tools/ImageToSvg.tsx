@@ -7,6 +7,7 @@ import { Upload, Download, Loader2 } from "lucide-react";
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 import { toast } from "sonner";
+import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -78,6 +79,8 @@ const ImageToSvg = () => {
     }
     setFiles((prev) => [...prev, ...valid]);
   };
+
+  useAdoptDroppedFile((f) => handleFiles([f]));
 
   const convert = async () => {
     if (!files.length) return;

@@ -7,6 +7,10 @@ import SiteHeader from "@/components/site/SiteHeader";
 import Hero from "@/components/site/Hero";
 import SiteFooter from "@/components/site/SiteFooter";
 import ToolErrorBoundary from "@/components/ToolErrorBoundary";
+// Importado direto, e não por lazy: o seletor de conversão é leve (só o
+// catálogo de formatos) e é a primeira coisa que a página oferece. Os motores
+// de conversão continuam sendo carregados sob demanda, dentro dele.
+import FileConverter from "@/components/tools/FileConverter";
 
 const ConvertersPanel = lazy(() => import("@/components/tools/ConvertersPanel"));
 const MediaEditPanel = lazy(() => import("@/components/tools/MediaEditPanel"));
@@ -109,6 +113,31 @@ const Tools = () => {
             <ArrowLeft className="w-4 h-4" />
             Voltar às ferramentas
           </Button>
+        )}
+
+        {!activeCluster && (
+          <Card className="mb-10 border-primary/30 bg-card animate-fade-in">
+            <CardHeader>
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Repeat className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold leading-none tracking-tight mb-1.5">
+                    Converter um arquivo
+                  </h2>
+                  <CardDescription>
+                    Solte o arquivo e escolha o formato de saída. Tudo acontece no seu navegador.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ToolErrorBoundary area="Conversão de Arquivos" resetKey="home-converter">
+                <FileConverter />
+              </ToolErrorBoundary>
+            </CardContent>
+          </Card>
         )}
 
         {!activeCluster ? (

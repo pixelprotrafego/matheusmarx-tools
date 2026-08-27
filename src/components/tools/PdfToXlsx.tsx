@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { Upload, Download, Loader2, X, FileText, AlertTriangle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { saveAs } from "file-saver";
+import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 const PdfToXlsx = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -73,6 +74,8 @@ const PdfToXlsx = () => {
       setLoading(false);
     }
   }, []);
+
+  useAdoptDroppedFile(processFile);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

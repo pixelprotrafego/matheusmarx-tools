@@ -8,6 +8,7 @@ import ProgressState from "./shared/ProgressState";
 import { runFFmpeg } from "@/lib/ffmpeg-runner";
 import { downloadBlob, replaceExt } from "@/lib/download";
 import { FileVideo } from "lucide-react";
+import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 const GifToMp4 = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -15,6 +16,8 @@ const GifToMp4 = () => {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  useAdoptDroppedFile(setFile);
 
   const convert = async () => {
     if (!file) return;

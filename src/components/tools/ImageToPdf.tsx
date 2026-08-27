@@ -7,6 +7,7 @@ import { saveAs } from "file-saver";
 import { toast } from "sonner";
 import { BATCH_LIMITS, checkBatch } from "@/lib/validate-file";
 import { fileToImage, drawToCanvas } from "@/lib/canvas-utils";
+import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 interface UploadedImage {
   id: string;
@@ -50,6 +51,8 @@ const ImageToPdf = () => {
     const loaded = await Promise.all(validFiles.map(loadImage));
     setImages((prev) => [...prev, ...loaded]);
   }, []);
+
+  useAdoptDroppedFile((f) => { void addFiles([f]); });
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
