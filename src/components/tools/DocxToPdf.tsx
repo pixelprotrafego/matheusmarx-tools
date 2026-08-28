@@ -5,6 +5,7 @@ import { Upload, Download, Loader2, X, FileText, AlertTriangle, RotateCcw } from
 import { toast } from "sonner";
 import { planSlices, type Block } from "@/lib/docx-pagination";
 import { hasMsoPosition, parseMsoPosition, resolveMsoOffset } from "@/lib/docx-vml-position";
+import { normalizeDocxForRender } from "@/lib/docx-normalize";
 import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 /** Um pixel de CSS vale 1/96 de polegada — a régua para converter px em mm. */
@@ -188,7 +189,12 @@ const DocxToPdf = () => {
       setProgress(20);
       setStatus("Renderizando o documento...");
 
-      await renderAsync(arrayBuffer, host, undefined, {
+      // O docx-preview usa o cabeçalho "par" em toda página de índice ímpar,
+      // sem checar se o Word tem essa opção ligada. Documentos que carregam uma
+      // referência "even" residual perdiam o cabeçalho verdadeiro da página 2.
+      const paraRenderizar = await normalizeDocxForRender(arrayBuffer);
+
+      await renderAsync(paraRenderizar, host, undefined, {
         className: "docx",
         inWrapper: true,
         breakPages: true,

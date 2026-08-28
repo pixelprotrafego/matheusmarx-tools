@@ -23,6 +23,7 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import JSZip from "jszip";
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -38,15 +39,39 @@ if (!arquivo) {
 // O build UMD do docx-preview espera o JSZip como global; carrega antes.
 const jszip = join(raiz, "node_modules", "jszip", "dist", "jszip.min.js");
 const umd = join(raiz, "node_modules", "docx-preview", "dist", "docx-preview.min.js");
-const base64 = readFileSync(arquivo).toString("base64");
+/**
+ * Mesma normalização de src/lib/docx-normalize.ts: sem `evenAndOddHeaders`
+ * ligado, as referências "even" são resíduo que o Word ignora — e que fazia o
+ * docx-preview trocar o cabeçalho da página 2.
+ */
+let bytesDocx = readFileSync(arquivo);
+if (aplicarFix) {
+  const zip = await JSZip.loadAsync(bytesDocx);
+  const settings = zip.file("word/settings.xml");
+  const settingsXml = settings ? await settings.async("string") : "";
+  const documentXml = await zip.file("word/document.xml").async("string");
+  const ligado = /<w:evenAndOddHeaders\b([^>]*)\/?>/.test(settingsXml)
+    && !/w:val\s*=\s*"(0|false|off)"/.test(settingsXml);
+
+  if (!ligado && /<w:(?:header|footer)Reference\b[^>]*w:type\s*=\s*"even"/.test(documentXml)) {
+    zip.file("word/document.xml", documentXml.replace(
+      /<w:(?:header|footer)Reference\b[^>]*w:type\s*=\s*"even"[^>]*\/>/g, ""));
+    bytesDocx = Buffer.from(await zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" }));
+    console.error("  [fix] referências de cabeçalho/rodapé 'even' removidas");
+  }
+}
+const base64 = bytesDocx.toString("base64");
 
 /** O mesmo CSS de `src/index.css`, para a medição valer para o app. */
 const CSS = `
   html, body { margin: 0; padding: 0; background: #fff; }
   .docx-render-host {
-    position: fixed; top: 0; left: -10000px; z-index: -1;
+    /* left:0 e não -10000px: aqui o host precisa ser alcançável por
+       elementsFromPoint, que trabalha em coordenadas da janela. */
+    position: absolute; top: 0; left: 0; z-index: -1;
     width: max-content; min-width: 900px;
-    background: #ffffff; color: #000000; color-scheme: light; pointer-events: none;
+    /* sem `pointer-events: none` de propósito: ele impediria elementsFromPoint */
+    background: #ffffff; color: #000000; color-scheme: light;
   }
   .docx-render-host * { color-scheme: light; }
   .docx-render-host .docx-wrapper { background: #ffffff; padding: 0; }
@@ -56,7 +81,9 @@ const CSS = `
 `;
 
 const navegador = await chromium.launch();
-const page = await navegador.newPage({ viewport: { width: 1440, height: 900 } });
+// Janela alta o bastante para as duas páginas caberem: elementsFromPoint só
+// enxerga o que está dentro da viewport.
+const page = await navegador.newPage({ viewport: { width: 1100, height: 2600 } });
 page.on("console", (m) => { if (m.type() === "error") console.error("  [browser]", m.text()); });
 
 await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body><div class="docx-render-host" id="host"></div></body></html>`);
@@ -197,6 +224,19 @@ const relatorio = await page.evaluate(async (b64) => {
       });
     }
 
+    // Sonda vertical: em que altura o fundo deixa de cobrir a página, e o que
+    // está por cima ali. Serve para achar faixas brancas no fim da página.
+    info.sonda = [];
+    const cx = sr.left + sr.width * 0.5;
+    for (const frac of [0.5, 0.9, 0.95, 0.97, 0.99, 0.995]) {
+      const cy = sr.top + sr.height * frac;
+      const pilha = document.elementsFromPoint(cx, cy).slice(0, 4).map((e) => {
+        const cls = e.className?.baseVal ?? e.className?.toString?.() ?? "";
+        return e.tagName.toLowerCase() + (cls ? "." + cls.split(" ")[0] : "");
+      });
+      info.sonda.push({ emY: num(sr.height * frac), doFim: num(sr.height * (1 - frac)), pilha });
+    }
+
     out.secoes.push(info);
   }
 
@@ -208,6 +248,9 @@ console.log(JSON.stringify(relatorio, null, 2));
 if (pastaShot) {
   // O host fica fora da tela; traz para 0,0 só para o screenshot.
   await page.evaluate(() => { document.getElementById("host").style.left = "0px"; });
+  // As <image> dentro dos <svg> do VML pintam depois do layout; sem esta espera
+  // o print sai sem o fundo da página.
+  await page.waitForTimeout(1500);
   const secoes = await page.$$("#host section.docx");
   for (let i = 0; i < secoes.length; i++) {
     const destino = join(pastaShot, `${aplicarFix ? "corrigido" : "atual"}-p${i + 1}.png`);
