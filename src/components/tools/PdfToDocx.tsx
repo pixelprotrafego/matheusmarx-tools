@@ -9,7 +9,9 @@ const PdfToDocx = () => {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState("");
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -17,74 +19,43 @@ const PdfToDocx = () => {
   const processFile = useCallback(async (selectedFile: File) => {
     setFile(selectedFile);
     setLoading(true);
-    setProgress(10);
+    setProgress(2);
+    setStatus("Lendo o arquivo...");
     setResultBlob(null);
+    setWarning(null);
     setError(null);
 
     try {
-      const { pdfjsLib } = await import("@/lib/pdfjs-setup");
-      setProgress(20);
-
+      const { pdfToDocx } = await import("@/lib/pdf-to-docx");
       const arrayBuffer = await selectedFile.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const totalPages = pdf.numPages;
-      setProgress(30);
 
-      const { Document, Packer, Paragraph, TextRun, HeadingLevel, PageBreak } = await import("docx");
-
-      const children: InstanceType<typeof Paragraph>[] = [];
-
-      for (let i = 1; i <= totalPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const lines: string[] = [];
-        let currentLine = "";
-        let lastY: number | null = null;
-
-        for (const item of textContent.items) {
-          if (!("str" in item)) continue;
-          const y = item.transform?.[5];
-          if (lastY !== null && y !== undefined && Math.abs(y - lastY) > 5) {
-            if (currentLine.trim()) lines.push(currentLine.trim());
-            currentLine = "";
-          }
-          currentLine += item.str + " ";
-          if (y !== undefined) lastY = y;
-        }
-        if (currentLine.trim()) lines.push(currentLine.trim());
-
-        if (i > 1) {
-          children.push(new Paragraph({ children: [new PageBreak()] }));
-        }
-
-        children.push(
-          new Paragraph({
-            heading: HeadingLevel.HEADING_2,
-            children: [new TextRun({ text: `Página ${i}`, bold: true })],
-          })
-        );
-
-        for (const line of lines) {
-          children.push(new Paragraph({ children: [new TextRun(line)] }));
-        }
-
-        setProgress(30 + Math.round((i / totalPages) * 60));
-      }
-
-      const doc = new Document({
-        sections: [{ children }],
+      const { blob, pages, pagesWithoutText } = await pdfToDocx(arrayBuffer, {
+        onProgress: (percent, message) => {
+          setProgress(percent);
+          setStatus(message);
+        },
       });
 
-      const blob = await Packer.toBlob(doc);
-      setProgress(100);
       setResultBlob(blob);
-      toast.success("PDF convertido para DOCX!");
+      // Página sem texto é página que veio digitalizada dentro de um PDF que
+      // tem texto no resto. O conteúdo dela não existe como texto em lugar
+      // nenhum do arquivo, então é melhor dizer isso do que deixar quem usa
+      // descobrir sozinho que faltou um pedaço.
+      if (pagesWithoutText > 0) {
+        setWarning(
+          pagesWithoutText === 1
+            ? "Uma página deste PDF é só imagem, sem texto por trás, e por isso ficou vazia no Word."
+            : `${pagesWithoutText} páginas deste PDF são só imagem, sem texto por trás, e por isso ficaram vazias no Word.`,
+        );
+      }
+      toast.success(`Word gerado a partir de ${pages} página${pages > 1 ? "s" : ""}.`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
       setError(msg);
       toast.error("Falha na conversão", { description: msg });
     } finally {
       setLoading(false);
+      setStatus("");
     }
   }, []);
 
@@ -115,6 +86,7 @@ const PdfToDocx = () => {
     setFile(null);
     setResultBlob(null);
     setProgress(0);
+    setWarning(null);
     setError(null);
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -152,7 +124,7 @@ const PdfToDocx = () => {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground">Extraindo texto e gerando DOCX...</span>
+                <span className="text-sm text-muted-foreground">{status || "Convertendo..."}</span>
               </div>
               <Progress value={progress} />
             </div>
@@ -165,6 +137,13 @@ const PdfToDocx = () => {
               <Button variant="outline" size="sm" onClick={() => file && processFile(file)} className="gap-1 shrink-0">
                 <RotateCcw className="w-3 h-3" /> Tentar novamente
               </Button>
+            </div>
+          )}
+
+          {warning && !loading && (
+            <div className="flex items-center gap-3 bg-amber-500/10 text-amber-700 dark:text-amber-400 rounded-lg p-4">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <p className="text-sm flex-1">{warning}</p>
             </div>
           )}
 
