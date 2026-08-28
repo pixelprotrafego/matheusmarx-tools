@@ -133,8 +133,13 @@ export function resolveMsoOffset({ mso, shape, page, content }: ResolveInput): {
 }
 
 /**
- * Uma forma que cobre a página inteira (ou mais) é fundo, e fundo tem que
- * começar na borda da folha — não na caixa de conteúdo.
+ * Uma forma que cobre a página inteira (ou mais) é fundo.
+ *
+ * Serve só para diagnóstico e para priorizar o que corrigir: a caixa de
+ * referência continua sendo a que o Word declarou em `mso-position-*-relative`.
+ * Forçar "page" aqui foi um erro de uma tentativa anterior — nos modelos reais
+ * o fundo é centralizado na caixa de *margens*, e forçar a folha deslocava a
+ * arte em ~19 px.
  */
 export const isFullBleed = (shape: { width: number; height: number }, page: { width: number; height: number }): boolean =>
   shape.width >= page.width * 0.98 || shape.height >= page.height * 0.98;

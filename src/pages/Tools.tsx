@@ -12,7 +12,6 @@ import ToolErrorBoundary from "@/components/ToolErrorBoundary";
 // de conversão continuam sendo carregados sob demanda, dentro dele.
 import FileConverter from "@/components/tools/FileConverter";
 
-const ConvertersPanel = lazy(() => import("@/components/tools/ConvertersPanel"));
 const MediaEditPanel = lazy(() => import("@/components/tools/MediaEditPanel"));
 const PdfToolsPanel = lazy(() => import("@/components/tools/PdfToolsPanel"));
 const TextToolsPanel = lazy(() => import("@/components/tools/TextToolsPanel"));
@@ -30,7 +29,6 @@ type ClusterKey =
   | "voice-tools"
   | "creative-tools"
   | "calc-tools"
-  | "converters"
   | "pdf-tools"
   | "media-edit"
   | "text-tools"
@@ -62,14 +60,6 @@ const clusters = [
     newCount: 2,
   },
   {
-    key: "converters" as const,
-    icon: Repeat,
-    title: "Conversão de Arquivos & Mídia",
-    description: "Documentos, imagens, áudio e vídeo em uma matriz única de conversões",
-    tags: ["PDF↔DOCX/XLSX", "HEIC/WEBP/AVIF", "GIF→MP4", "MP4/MKV/WEBM", "MP3/WAV/FLAC/OPUS", "CSV↔JSON↔YAML"],
-    newCount: 31,
-  },
-  {
     key: "pdf-tools" as const,
     icon: FileStack,
     title: "Ferramentas PDF",
@@ -81,8 +71,8 @@ const clusters = [
     key: "media-edit" as const,
     icon: Wand2,
     title: "Edição de Imagem & Vídeo",
-    description: "Redimensionar, comprimir, remover fundo, cortar e unir vídeos, extrair frames e áudio",
-    tags: ["Redimensionar", "Comprimir", "Remover Fundo (IA)", "Favicon", "Cortar", "Unir", "GIF", "Frames", "Áudio"],
+    description: "Converter áudio e vídeo, redimensionar, comprimir, remover fundo, cortar e unir vídeos, extrair frames e áudio",
+    tags: ["Converter áudio/vídeo", "MP4/MKV/WEBM", "MP3/WAV/FLAC/OPUS", "Redimensionar", "Comprimir", "Remover Fundo (IA)", "Favicon", "Cortar", "Unir", "GIF", "Frames"],
     newCount: 9,
   },
   {
@@ -201,7 +191,6 @@ const Tools = () => {
                     {activeCluster === "voice-tools" && <VoiceToolsPanel />}
                     {activeCluster === "creative-tools" && <CreativeToolsPanel />}
                     {activeCluster === "calc-tools" && <CalcToolsPanel />}
-                    {activeCluster === "converters" && <ConvertersPanel />}
                     {activeCluster === "pdf-tools" && <PdfToolsPanel />}
                     {activeCluster === "media-edit" && <MediaEditPanel />}
                     {activeCluster === "text-tools" && <TextToolsPanel />}

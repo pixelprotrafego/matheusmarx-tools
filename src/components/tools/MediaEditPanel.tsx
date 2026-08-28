@@ -1,5 +1,6 @@
-import { Maximize2, Minimize2, Sparkles, ImageIcon, Scissors, Combine, Film, Frame, Music } from "lucide-react";
+import { Maximize2, Minimize2, Sparkles, ImageIcon, Scissors, Combine, Film, Frame, Music, Repeat } from "lucide-react";
 import SubToolPanel, { type SubTool } from "./shared/SubToolPanel";
+import MediaConverter from "./MediaConverter";
 import ImageResizer from "./ImageResizer";
 import ImageCompressor from "./ImageCompressor";
 import BackgroundRemover from "./BackgroundRemover";
@@ -13,6 +14,16 @@ import VideoFrameExtractor from "./VideoFrameExtractor";
 import AudioExtractor from "./AudioExtractor";
 
 const tools: SubTool[] = [
+  // Conversão de áudio e vídeo. Veio do cartão "Conversão de Arquivos & Mídia",
+  // que deixou de existir quando a conversão de arquivos subiu para o topo da
+  // página inicial: aqui ela fica junto do resto de áudio e vídeo.
+  {
+    key: "media-convert",
+    icon: Repeat,
+    title: "Conversão de Mídia",
+    description: "Matriz completa de áudio/vídeo (MP4, MKV, WEBM, MP3, M4A, OPUS...)",
+    render: () => <MediaConverter />,
+  },
   // Imagem
   { key: "img-resize", icon: Maximize2, title: "Redimensionar Imagem", description: "Mudar dimensões (px), batch + ZIP", isNew: true, render: () => <ImageResizer /> },
   { key: "img-compress", icon: Minimize2, title: "Comprimir Imagem", description: "JPEG/WEBP com qualidade ajustável", isNew: true, render: () => <ImageCompressor /> },

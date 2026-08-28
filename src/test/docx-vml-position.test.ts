@@ -6,25 +6,29 @@ import {
   resolveMsoOffset,
 } from "@/lib/docx-vml-position";
 
-/** O estilo real da forma de fundo do documento que motivou esta correção. */
+/**
+ * O estilo real da forma de fundo, copiado do que o Chromium reportou ao
+ * renderizar o documento (veja `scripts/diagnostico-docx.mjs`). Repare que a
+ * referência é a caixa de *margens*, não a folha, e que não há `left`.
+ */
 const ESTILO_FUNDO =
-  "position:absolute;left:0;text-align:left;margin-left:0;margin-top:0;" +
-  "width:702.95pt;height:997.05pt;z-index:-251658752;" +
-  "mso-position-horizontal:center;mso-position-horizontal-relative:page;" +
-  "mso-position-vertical:center;mso-position-vertical-relative:page";
+  "position:absolute;margin-left:0;margin-top:0;" +
+  "width:702.95pt;height:997.05pt;z-index:-251656704;" +
+  "mso-position-horizontal:center;mso-position-horizontal-relative:margin;" +
+  "mso-position-vertical:center;mso-position-vertical-relative:margin";
 
-// A4 a 96 dpi: 210 x 297 mm.
+// Geometria medida no navegador para este documento.
 const A4 = { width: 793.7, height: 1122.5 };
-// Margens do documento: esquerda 30 mm, direita 20 mm, topo 13.2 mm.
-const CONTEUDO = { left: 113.4, top: 49.9, width: 793.7 - 113.4 - 75.6, height: 1122.5 - 49.9 - 75.6 };
+const CONTEUDO = { left: 113.4, top: 50.07, width: 604.7, height: 996.83 };
+const FORMA = { width: 937.3, height: 1329.4 };
 
 describe("parseMsoPosition", () => {
   it("lê alinhamento e referência do estilo real do Word", () => {
     expect(parseMsoPosition(ESTILO_FUNDO)).toEqual({
       horizontal: "center",
-      horizontalRelative: "page",
+      horizontalRelative: "margin",
       vertical: "center",
-      verticalRelative: "page",
+      verticalRelative: "margin",
     });
   });
 
@@ -75,32 +79,44 @@ describe("isFullBleed", () => {
 });
 
 describe("resolveMsoOffset", () => {
-  it("centraliza o fundo sangrado na folha, entrando em coordenada negativa", () => {
-    const shape = { width: 937, height: 1329 };
+  it("centraliza o fundo na caixa de margens, como o Word", () => {
     const { left, top } = resolveMsoOffset({
       mso: parseMsoPosition(ESTILO_FUNDO),
-      shape,
+      shape: FORMA,
       page: A4,
       content: CONTEUDO,
     });
 
-    // (793.7 - 937) / 2 = -71.65 : a forma sangra igualmente pelos dois lados.
-    expect(left).toBeCloseTo(-71.65, 1);
-    expect(top).toBeCloseTo((A4.height - shape.height) / 2, 1);
+    // 113.4 + (604.7 - 937.3) / 2 = -52.9 : sangra pelos dois lados.
+    expect(left).toBeCloseTo(-52.9, 1);
+    // 50.07 + (996.83 - 1329.4) / 2 = -116.2
+    expect(top).toBeCloseTo(-116.2, 1);
   });
 
-  it("não deixa o fundo começar dentro da área de texto", () => {
-    // O defeito original: a forma caía na origem do conteúdo (113.4px),
-    // deixando essa faixa da esquerda sem fundo nenhum.
+  it("corrige as duas posições erradas que o navegador produz sozinho", () => {
     const { left } = resolveMsoOffset({
       mso: parseMsoPosition(ESTILO_FUNDO),
-      shape: { width: 937, height: 1329 },
+      shape: FORMA,
       page: A4,
       content: CONTEUDO,
     });
 
-    expect(left).toBeLessThan(0);
+    // Página 1 caía em x=0 (o VML trazia `left:0`) e página 2 em x=113.4
+    // (sem `left`, o absoluto assume a posição estática, dentro do header).
+    expect(left).not.toBeCloseTo(0, 0);
     expect(left).not.toBeCloseTo(CONTEUDO.left, 0);
+    expect(left).toBeLessThan(0);
+  });
+
+  it("não centraliza na folha quando o Word pediu a caixa de margens", () => {
+    // Erro de uma tentativa anterior: forçar "page" dava -71.65 em vez de -52.9.
+    const { left } = resolveMsoOffset({
+      mso: parseMsoPosition(ESTILO_FUNDO),
+      shape: FORMA,
+      page: A4,
+      content: CONTEUDO,
+    });
+    expect(left).not.toBeCloseTo((A4.width - FORMA.width) / 2, 1);
   });
 
   it("alinha à esquerda da folha quando pedido", () => {

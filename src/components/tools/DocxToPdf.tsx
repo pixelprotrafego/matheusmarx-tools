@@ -4,7 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { Upload, Download, Loader2, X, FileText, AlertTriangle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { planSlices, type Block } from "@/lib/docx-pagination";
-import { hasMsoPosition, isFullBleed, parseMsoPosition, resolveMsoOffset } from "@/lib/docx-vml-position";
+import { hasMsoPosition, parseMsoPosition, resolveMsoOffset } from "@/lib/docx-vml-position";
 import { useAdoptDroppedFile } from "./shared/dropped-file";
 
 /** Um pixel de CSS vale 1/96 de polegada — a régua para converter px em mm. */
@@ -51,29 +51,35 @@ const declaredPageHeight = (section: HTMLElement): number => {
 };
 
 /**
- * Recoloca as formas VML de fundo desta seção.
+ * Recoloca as formas VML posicionadas por `mso-position-*`.
  *
- * Modelos corporativos desenham o fundo da página com uma forma maior que a
- * folha, centralizada, para sangrar pelas bordas. O `docx-preview` copia o
- * estilo do VML literalmente para um `<svg>`, e o navegador descarta as
- * propriedades `mso-position-*` que fazem esse alinhamento — a forma ia parar
- * na origem da caixa de conteúdo, deslocada pelas margens, e o `overflow:hidden`
- * cortava o resto, deixando uma faixa da página sem fundo nenhum.
+ * O Word desenha o fundo da página como uma forma VML maior que a folha,
+ * centralizada na caixa de margens para sangrar pelas bordas. O `docx-preview`
+ * copia o estilo do VML literalmente para um `<svg>`, e o navegador descarta as
+ * `mso-position-*`, que são só do Word.
+ *
+ * O estrago aparece quando o VML também não traz `left`: sem ela, um elemento
+ * `position:absolute` assume a *posição estática*, que fica dentro do
+ * `<header>` e portanto deslocada pela margem esquerda da página. Foi o que
+ * mediu-se neste documento — página 1 com `left:0` (x=0) e página 2 sem `left`
+ * (x=113,4), quando o Word põe as duas em x=-52,9.
  */
-const fixVmlBackgrounds = (section: HTMLElement) => {
+const fixVmlPositioning = (section: HTMLElement) => {
   const rect = section.getBoundingClientRect();
   const estilo = getComputedStyle(section);
-  const padLeft = parseFloat(estilo.paddingLeft) || 0;
-  const padRight = parseFloat(estilo.paddingRight) || 0;
-  const padTop = parseFloat(estilo.paddingTop) || 0;
-  const padBottom = parseFloat(estilo.paddingBottom) || 0;
+  const pad = {
+    left: parseFloat(estilo.paddingLeft) || 0,
+    right: parseFloat(estilo.paddingRight) || 0,
+    top: parseFloat(estilo.paddingTop) || 0,
+    bottom: parseFloat(estilo.paddingBottom) || 0,
+  };
 
   const page = { width: rect.width, height: rect.height };
   const content = {
-    left: padLeft,
-    top: padTop,
-    width: rect.width - padLeft - padRight,
-    height: rect.height - padTop - padBottom,
+    left: pad.left,
+    top: pad.top,
+    width: rect.width - pad.left - pad.right,
+    height: rect.height - pad.top - pad.bottom,
   };
 
   for (const svg of Array.from(section.querySelectorAll<SVGElement>("svg[style]"))) {
@@ -84,29 +90,23 @@ const fixVmlBackgrounds = (section: HTMLElement) => {
     const shape = { width: shapeRect.width, height: shapeRect.height };
     if (!(shape.width > 0 && shape.height > 0)) continue;
 
-    const mso = parseMsoPosition(styleText);
-
-    // Fundo de página sangrado se ancora na folha, não na área de texto —
-    // mesmo quando o Word declarou a referência como "margin" ou "column".
-    const sangrado = isFullBleed(shape, page);
     const { left, top } = resolveMsoOffset({
-      mso: sangrado
-        ? { ...mso, horizontalRelative: "page", verticalRelative: "page" }
-        : mso,
+      mso: parseMsoPosition(styleText),
       shape,
       page,
       content,
     });
 
-    // O elemento é `position:absolute` dentro da seção, cuja caixa de
-    // referência começa depois do padding: por isso o desconto aqui.
+    // `left`/`top` de um absoluto se resolvem contra a caixa de padding da
+    // seção, cuja origem é a própria borda da seção — o mesmo referencial em
+    // que `left` e `top` foram calculados. Nada a descontar aqui.
     if (left !== null) {
-      svg.style.left = `${left - padLeft}px`;
-      svg.style.marginLeft = "0";
+      svg.style.left = `${left}px`;
+      svg.style.marginLeft = "0px";
     }
     if (top !== null) {
-      svg.style.top = `${top - padTop}px`;
-      svg.style.marginTop = "0";
+      svg.style.top = `${top}px`;
+      svg.style.marginTop = "0px";
     }
   }
 };
@@ -214,9 +214,9 @@ const DocxToPdf = () => {
       const sections = Array.from(host.querySelectorAll<HTMLElement>("section.docx"));
       if (!sections.length) throw new Error("Não foi possível renderizar as páginas deste documento.");
 
-      // Antes de medir e rasterizar: o docx-preview posiciona as formas VML
-      // pelo estilo cru do Word, que o navegador não entende inteiro.
-      for (const section of sections) fixVmlBackgrounds(section);
+      // Antes de medir e rasterizar: o navegador não entende as `mso-position-*`
+      // que o Word usa para posicionar o fundo da página.
+      for (const section of sections) fixVmlPositioning(section);
       await new Promise((r) => requestAnimationFrame(() => r(null)));
 
       const tiles = planPages(sections);
