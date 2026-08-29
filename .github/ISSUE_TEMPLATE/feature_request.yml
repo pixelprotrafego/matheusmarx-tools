@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a new tool or an improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before suggesting: everything in this project has to run inside the
+        browser, on the user's machine. A feature that requires uploading files
+        to a server will not be accepted, however useful — see CONTRIBUTING.md.
+
+        Pode escrever em português.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: Describe the situation you are in, not the solution you imagined.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: local
+    attributes:
+      label: Local processing
+      options:
+        - label: As far as I know, this can run entirely in the browser without a server
+          required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you use today instead
+      description: Another site, a desktop program, doing it by hand.

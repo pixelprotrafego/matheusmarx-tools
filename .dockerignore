@@ -1,0 +1,34 @@
+# Tudo o que não precisa entrar no contexto de build.
+#
+# O `.env` está aqui de propósito: as chaves da instalação oficial não podem
+# vazar para dentro de uma imagem que qualquer pessoa pode baixar. Quem quiser
+# ligar as ferramentas de áudio passa as variáveis como build args.
+.env
+.env.*
+!.env.example
+
+node_modules
+dist
+dist-ssr
+*.local
+
+.git
+.github
+.vscode
+.idea
+
+# Recriado pelo `prebuild` a partir do node_modules, dentro da imagem.
+public/ffmpeg
+
+# Documentação e ferramentas de desenvolvimento não afetam o resultado do build
+# e só fariam a camada de contexto crescer.
+docs
+*.md
+!README.md
+LICENSE
+
+npm-debug.log*
+yarn-error.log*
+Dockerfile
+docker-compose.yml
+.dockerignore

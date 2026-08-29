@@ -2,7 +2,31 @@
   "name": "matheusmarx-tools",
   "private": true,
   "version": "1.0.0",
+  "description": "Utility tools — file conversion, PDF editing, media, text and privacy — that run entirely in the browser. No uploads, no server.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Matheus Marx",
+  "homepage": "https://tools.matheusmarx.com.br/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pixelprotrafego/matheusmarx-tools.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pixelprotrafego/matheusmarx-tools/issues"
+  },
+  "keywords": [
+    "pdf",
+    "docx",
+    "converter",
+    "ffmpeg-wasm",
+    "browser",
+    "offline",
+    "privacy",
+    "local-first"
+  ],
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "predev": "node scripts/copy-ffmpeg-core.mjs",
     "dev": "vite",
@@ -12,10 +36,13 @@
     "build:dev": "vite build --mode development",
     "ffmpeg:copy": "node scripts/copy-ffmpeg-core.mjs",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "telegram": "node scripts/telegram-setup.mjs"
+    "telegram": "node scripts/telegram-setup.mjs",
+    "docker:build": "docker build -t matheusmarx-tools .",
+    "docker:run": "docker run --rm -p 7767:7767 matheusmarx-tools"
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.9",

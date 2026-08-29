@@ -1,0 +1,38 @@
+# Sobe o Matheus Marx Tools em http://localhost:7767
+#
+#   docker compose up -d
+#
+# Não há volume nem banco: o contêiner é descartável e nenhum dado de quem usa
+# passa por ele — os arquivos são processados dentro do navegador.
+
+services:
+  tools:
+    build:
+      context: .
+      args:
+        # Todos opcionais. Deixe em branco para a instalação padrão, que roda
+        # sem nenhuma dependência externa.
+        #
+        # As duas ferramentas de Áudio & Voz (transcrição e texto para fala) são
+        # a única parte que precisa de servidor. Para ligá-las, preencha as três
+        # variáveis do Supabase e libere o domínio dele no connect-src de
+        # docker/nginx.conf.
+        VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:-}"
+        VITE_SUPABASE_PUBLISHABLE_KEY: "${VITE_SUPABASE_PUBLISHABLE_KEY:-}"
+        VITE_SUPABASE_PROJECT_ID: "${VITE_SUPABASE_PROJECT_ID:-}"
+        # Trava de domínio, desligada por padrão. Em auto-hospedagem geralmente
+        # se deixa vazia mesmo.
+        VITE_ALLOWED_HOSTS: "${VITE_ALLOWED_HOSTS:-}"
+    image: matheusmarx-tools:local
+    container_name: matheusmarx-tools
+    ports:
+      - "7767:7767"
+    restart: unless-stopped
+    # O contêiner só lê arquivos já embutidos na imagem; nada precisa ser escrito
+    # em disco durante o uso.
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true

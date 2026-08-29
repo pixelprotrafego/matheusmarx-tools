@@ -1,7 +1,24 @@
+# Cabeçalhos para hospedagens que leem este formato: Cloudflare Pages e Netlify.
+#
+# A Vercel NÃO lê este arquivo — lá os cabeçalhos vêm de `vercel.json`, na raiz
+# do projeto. Mantenha os dois em sincronia ao mexer na CSP.
+#
+# Não há nenhuma origem de fonte externa liberada: as fontes da marca são
+# servidas de /fonts/, pelo próprio domínio.
+
 /*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://connect.facebook.net; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' blob: data: https://cdn.jsdelivr.net https://unpkg.com https://*.supabase.co https://www.facebook.com https://connect.facebook.net; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(self), microphone=(), geolocation=(), interest-cohort=()
+  Permissions-Policy: camera=(self), microphone=(self), geolocation=(), interest-cohort=()
   Cross-Origin-Opener-Policy: same-origin
-  Content-Security-Policy: frame-ancestors 'none'
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/ffmpeg/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable

@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Um push novo cancela a execução anterior do mesmo branch: sem isso, uma
+# sequência de commits enfileira builds que já nasceram obsoletos.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, types, tests and build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 é o mínimo declarado em package.json; 22 avisa cedo sobre quebras
+        # na próxima LTS.
+        node: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      # O build precisa passar sem nenhuma variável de ambiente: é exatamente a
+      # situação de quem acabou de clonar o repositório.
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: matheusmarx-tools:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Sobe o contêiner e confere que ele responde, para um erro de nginx.conf
+      # não passar despercebido só porque a imagem foi construída.
+      - name: Smoke test
+        run: |
+          docker run -d --name tools -p 7767:7767 matheusmarx-tools:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:7767/ > /dev/null; then
+              echo "respondeu na tentativa $i"
+              curl -fsSI http://localhost:7767/ | grep -i "content-security-policy"
+              docker rm -f tools
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "o contêiner não respondeu"
+          docker logs tools
+          docker rm -f tools
+          exit 1

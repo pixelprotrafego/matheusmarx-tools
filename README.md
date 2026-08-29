@@ -1,119 +1,185 @@
 # Matheus Marx Tools
 
-Hub de ferramentas utilitárias que rodam **inteiramente no navegador**. Nenhum
-arquivo do usuário sai da máquina dele: conversões, edições e cálculos acontecem
-localmente, via WebAssembly e APIs nativas do navegador.
+**A toolbox for everyday file work — PDF, Office, images, audio and video — that runs entirely inside your browser.**
 
-Produção: <https://tools.matheusmarx.com.br/>
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![CI](https://github.com/pixelprotrafego/matheusmarx-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/pixelprotrafego/matheusmarx-tools/actions/workflows/ci.yml)
 
-## Ferramentas
+Live instance: <https://tools.matheusmarx.com.br/> · [Leia em português](README.pt-BR.md)
 
-| Grupo | O que faz |
+---
+
+## Why another converter
+
+Most "free online converters" work the same way: you upload your file to a
+server you know nothing about, it comes back converted, and you hope it was
+deleted. For a contract, a medical report or an ID scan, that is a bad trade.
+
+This one never uploads anything. Conversion, editing and OCR-free text
+extraction all happen in the tab, using WebAssembly and browser APIs. You can
+disconnect from the internet after the page loads and everything still works.
+
+That is also why it can be self-hosted in one command — there is no backend to
+host.
+
+## Tools
+
+| Group | What it does |
 | --- | --- |
-| Áudio & Voz | Transcrição de áudio e texto para fala |
-| Notepad & Desenho | Bloco de notas com formatação rica e prancheta de desenho livre |
-| Calculadora & Conversões | Calculadora científica e conversor de unidades |
-| Conversão de Arquivos & Mídia | PDF ↔ DOCX/XLSX, HEIC/WEBP/AVIF, GIF → MP4, MP4/MKV/WEBM, MP3/WAV/FLAC/OPUS, CSV ↔ JSON ↔ YAML |
-| Ferramentas PDF | Unir, separar, rotacionar, comprimir, marca d'água, reordenar, achatar, extrair imagens |
-| Edição de Imagem & Vídeo | Redimensionar, comprimir, remover fundo, cortar, unir, extrair frames e áudio |
-| Privacidade & Utilitários | QR Code, senhas, hashes, Base64, JSON, limpeza de metadados, esteganografia |
+| **File & media conversion** | PDF ↔ DOCX/XLSX, HEIC/WEBP/AVIF, GIF → MP4, MP4/MKV/WEBM, MP3/WAV/FLAC/OPUS, CSV ↔ JSON ↔ YAML |
+| **PDF tools** | Merge, split, rotate, compress, watermark, reorder, flatten, extract images |
+| **Image & video editing** | Resize, compress, remove background, crop, join, extract frames and audio |
+| **Notepad & drawing** | Rich-text notepad and a freehand drawing board |
+| **Calculator & units** | Scientific calculator and unit converter |
+| **Privacy & utilities** | QR codes, passwords, hashes, Base64, JSON, metadata scrubbing, steganography |
+| **Audio & voice** ⚠️ | Speech-to-text and text-to-speech — *the only tools that need a server* |
 
-## Stack
+The PDF ↔ Word converters are the ones under the most active development: they
+reconstruct fonts, colours, alignment, lists, tables, headers and footers rather
+than dumping plain text.
 
-- **Vite** + **React 18** + **TypeScript**
-- **Tailwind CSS** + **shadcn/ui** (Radix)
-- **pdf-lib** / **pdf.js** — manipulação e leitura de PDF
-- **ffmpeg.wasm** — áudio e vídeo
-- **SheetJS**, **mammoth**, **docx**, **docx-preview** — arquivos Office
-- **fabric** — prancheta de desenho
-- **TipTap** — editor de texto rico
-- **@imgly/background-removal** — remoção de fundo por modelo local
+## Quick start
 
-## Rodando localmente
+### Docker (recommended for self-hosting)
 
-Requer Node.js 20+.
+```sh
+git clone https://github.com/pixelprotrafego/matheusmarx-tools.git
+cd matheusmarx-tools
+docker compose up -d
+```
+
+Open <http://localhost:7767>.
+
+The image is a static file server and nothing else — no database, no volumes, no
+state. It ships the ~31 MB ffmpeg WebAssembly engine inside, so video tools work
+with no internet connection at all.
+
+```sh
+docker compose down          # stop
+docker compose up -d --build # rebuild after pulling changes
+```
+
+### From source
+
+Requires **Node.js 20+**.
 
 ```sh
 npm install
-npm run dev      # http://localhost:8080
+npm run dev      # http://localhost:7767
 ```
 
-Outros comandos:
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Dev server with hot reload |
+| `npm run build` | Production build into `dist/` |
+| `npm run preview` | Serve the production build locally |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript, no emit |
+| `npm test` | Vitest |
 
-```sh
-npm run build    # build de produção em dist/
-npm run preview  # serve o build localmente
-npm run lint     # eslint
-npm test         # vitest
-```
+## Configuration
 
-## Variáveis de ambiente
+**Everything is optional.** Copy `.env.example` to `.env` only if you need one
+of these.
 
-Copie `.env.example` para `.env` e preencha conforme necessário.
-
-| Variável | Obrigatória | Para que serve |
+| Variable | Default | What it does |
 | --- | --- | --- |
-| `VITE_ALLOWED_HOSTS` | não | Trava de domínio. Lista de hostnames separados por vírgula onde a aplicação pode rodar. Vazio = trava desligada. Um item iniciado por `.` libera o domínio e seus subdomínios. |
-| `VITE_SUPABASE_URL` | sim¹ | URL do projeto Supabase |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | sim¹ | Chave publishable (anon) do Supabase |
-| `VITE_SUPABASE_PROJECT_ID` | sim¹ | ID do projeto Supabase |
+| `VITE_SUPABASE_URL` | empty | Enables the two Audio & Voice tools |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | empty | Same |
+| `VITE_SUPABASE_PROJECT_ID` | empty | Same |
+| `VITE_ALLOWED_HOSTS` | empty (off) | Comma-separated hostnames the app is allowed to run on. `localhost` is always allowed |
+| `VITE_META_PIXEL_ID` | empty (off) | Loads the Meta Pixel. **Off unless you set it** — a fork should never inherit someone else's analytics |
 
-¹ Necessárias apenas para as duas ferramentas de Áudio & Voz, que são as únicas
-que dependem de servidor. Todo o resto funciona sem nenhuma configuração.
+Vite bakes these into the bundle at **build** time, not at run time. In Docker
+they are build args; see `docker-compose.yml`.
 
-## Backend
+## The one exception to "everything is local"
 
-As ferramentas de **transcrição de áudio** e **texto para fala** são a única
-exceção ao processamento local: elas chamam edge functions em `supabase/functions/`,
-que por sua vez usam a API da Groq (Whisper e Orpheus).
+Speech-to-text and text-to-speech cannot run in the browser at acceptable
+quality, so they call Supabase edge functions in `supabase/functions/`, which in
+turn call the Groq API (Whisper and Orpheus).
 
-| Secret | Onde | Para que serve |
+**Without Supabase configured, those two tools show a message explaining they are
+disabled. Nothing else is affected.** If you want them, you need your own
+Supabase project:
+
+| Secret | Where | What for |
 | --- | --- | --- |
-| `GROQ_API_KEY` | Supabase | Acesso à API da Groq |
-| `ALLOWED_ORIGINS` | Supabase | Origens autorizadas a chamar as functions. Vazio = checagem desligada. |
-| `TELEGRAM_BOT_TOKEN` | Supabase | Token do bot, para o webhook do Telegram |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | Supabase | Chat ids autorizados a usar o bot, separados por vírgula. Vazio = ninguém. |
+| `GROQ_API_KEY` | Supabase | Groq API access |
+| `ALLOWED_ORIGINS` | Supabase | Origins allowed to call the functions. Empty disables the check |
+| `TELEGRAM_BOT_TOKEN` | Supabase | Optional Telegram bot |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | Supabase | Chat ids allowed to use the bot. Empty means nobody |
 
-O banco guarda apenas dados descartáveis: contadores de limite por IP e
-arquivos do Telegram aguardando uma ação, com validade de minutos. Nenhum
-conteúdo de usuário é armazenado.
+The database stores only disposable data: per-IP rate-limit counters and files
+awaiting a Telegram action, both expiring within minutes. No user content is
+ever stored.
 
-## Bot do Telegram
+## Honest privacy notes
 
-O bot expõe as ferramentas pelo chat: `/calc`, `/conv`, `/qr`, `/senha`, `/tts`,
-além de transcrever áudios e oferecer um menu de ações ao receber PDF, imagem,
-DOCX ou XLSX. Ele fala direto com `api.telegram.org`.
+**A default self-hosted install makes zero external requests.** Not "almost
+zero" — the Docker image ships a Content-Security-Policy that allows no
+third-party origin at all, so any attempt to reach one fails visibly instead of
+happening quietly. This is verified on every push by the CI smoke test.
 
-A configuração envolve **dois números diferentes**:
+What that took, and what it means for you:
 
-- **`TELEGRAM_BOT_TOKEN`** — a senha do bot, entregue pelo `@BotFather`. Tem
-  dois-pontos no meio: `123456789:AAHdqTcvCH1...`
-- **`TELEGRAM_ALLOWED_CHAT_IDS`** — o id da **sua conta pessoal** do Telegram,
-  que autoriza você a usar o bot. É só um número: `987654321`. Sem ele, o bot
-  ignora todo mundo em silêncio.
+- **Fonts** (Sora and DM Sans) are served from `/fonts/` on your own domain.
+  They used to come from Google Fonts, which handed every visitor's IP to Google
+  on every page load. They are variable-weight `woff2` files, ~104 KB in total,
+  licensed under the SIL Open Font License 1.1 (see `public/fonts/`).
+- **ffmpeg** is served from your own domain too. `unpkg`/`jsdelivr` remain in the
+  code only as a fallback if that copy is missing, and the Docker CSP blocks
+  them, so a missing copy fails loudly rather than phoning out.
+- **Analytics** are off unless `VITE_META_PIXEL_ID` is set. The official
+  instance sets it; your clone does not. The official deployment's CSP therefore
+  allows the Meta domains — a self-hosted one does not.
+- **Audio & voice** send audio and text to a server, as described above. They
+  are visibly marked and disabled by default.
 
-```sh
-supabase functions deploy telegram-webhook
-supabase secrets set TELEGRAM_BOT_TOKEN=<token do @BotFather>
-supabase secrets set GROQ_API_KEY=<sua chave da Groq>
+Everything else — every conversion, every PDF operation, every image and video
+edit — happens in the tab and touches no network.
 
-# Descobrir o id da sua conta (mande uma mensagem ao bot antes)
-$env:TELEGRAM_BOT_TOKEN = "<token>"
-npm run telegram chat-id
-supabase secrets set TELEGRAM_ALLOWED_CHAT_IDS=<o id da sua conta>
+## Self-hosting a fork
 
-# Registrar o webhook e conferir
-npm run telegram set https://<ref>.supabase.co/functions/v1/telegram-webhook
-npm run telegram status
-```
+If you deploy this on your own domain, edit `index.html` and replace the
+`og:url`, `og:image`, `twitter:image`, `canonical` and the two JSON-LD blocks,
+which point at the official instance. Also review the `Content-Security-Policy`
+in `docker/nginx.conf` (self-hosted) or `vercel.json` (Vercel).
 
-O `secret_token` do webhook é derivado do próprio token do bot, então não
-precisa ser guardado: a edge function recalcula e compara a cada update.
+`src/components/DomainGuard.tsx` can pin a build to specific hostnames via
+`VITE_ALLOWED_HOSTS`. It is a convenience for the official deployment, not a
+security control — with the source public, anyone can remove it.
 
-Limite herdado da Bot API: o bot só consegue baixar arquivos de até 20 MB.
+## Architecture
 
-## Deploy
+- **Vite** + **React 18** + **TypeScript**, no server-side rendering
+- **Tailwind CSS** + **shadcn/ui** (Radix)
+- **pdf.js** / **pdf-lib** — reading and manipulating PDF
+- **docx**, **docx-preview**, **SheetJS** — Office formats
+- **ffmpeg.wasm** — audio and video
+- **fabric** — drawing board · **TipTap** — rich-text editor
+- **@imgly/background-removal** — background removal via a local model
 
-O build é estático (`dist/`) e pode ser servido por qualquer host de arquivos.
-Em produção, defina `VITE_ALLOWED_HOSTS` no ambiente de build e `ALLOWED_ORIGINS`
-nos secrets do Supabase para restringir o uso ao domínio oficial.
+The PDF → Word engine lives in `src/lib/pdf-to-docx/` and is documented
+module by module; `scripts/diagnostico-pdf-docx.mjs` runs it in a real Chromium
+and writes the resulting `.docx` for inspection.
+
+## Contributing
+
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Source comments are written in Portuguese and explain *why* a decision was made;
+please keep that habit. To report a security problem, read
+[SECURITY.md](SECURITY.md).
+
+## License
+
+[GNU Affero General Public License v3.0 or later](LICENSE).
+
+This is not a stylistic choice. The project depends on
+`@imgly/background-removal` (AGPL-3.0) and `@ffmpeg/core` (GPL-2.0-or-later), so
+the combined work must be AGPL. In practice it means: use it, change it, host it
+— but if you run a modified version as a public service, publish your changes
+too.
+
+See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for the full dependency
+breakdown.

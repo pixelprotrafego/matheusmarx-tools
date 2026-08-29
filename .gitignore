@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Configuração local. O `.env.example` é o que fica versionado; o `.env` é de
+# cada instalação e não deve viajar no repositório, mesmo contendo apenas
+# chaves publishable — quem clona precisa preencher as suas, e não herdar as
+# de outra pessoa sem perceber.
+.env
+.env.*
+!.env.example
+
 # Credenciais de administração do banco. Diferente das chaves do .env, que são
 # públicas por natureza, o conteúdo daqui dá acesso total ao Postgres.
 .supabase-db-url

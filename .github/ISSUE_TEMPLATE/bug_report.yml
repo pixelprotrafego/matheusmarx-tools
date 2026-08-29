@@ -1,0 +1,76 @@
+name: Bug report
+description: Something is broken or a conversion came out wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For conversion bugs, the input file plus the wrong
+        output tells us far more than any description — please attach both if you
+        can share them.
+
+        Pode escrever em português.
+
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which tool
+      options:
+        - PDF to Word
+        - Word to PDF
+        - Other file or media conversion
+        - PDF tools (merge, split, compress, …)
+        - Image or video editing
+        - Notepad or drawing
+        - Calculator or units
+        - Privacy and utilities
+        - Audio and voice
+        - Something else / the site itself
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      placeholder: |
+        1. Open the PDF to Word tool
+        2. Drop the attached file
+        3. The generated document is missing the table on page 2
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: Chrome 141 on Windows 11
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running it
+      options:
+        - tools.matheusmarx.com.br
+        - Docker
+        - npm run dev, from source
+        - Another deployment
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console errors
+      description: Open the developer tools console and paste anything in red.
+      render: text

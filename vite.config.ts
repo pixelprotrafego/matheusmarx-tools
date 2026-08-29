@@ -3,13 +3,25 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
 // https://vitejs.dev/config/
+/**
+ * Porta única do projeto, em desenvolvimento, no `preview` e no contêiner.
+ *
+ * Ter um número só evita a confusão de "em qual porta está rodando agora?" e é
+ * o mesmo endereço citado no README e no docker-compose.
+ */
+const PORT = 7767;
+
 export default defineConfig(() => ({
   server: {
     host: "::",
-    port: 8080,
+    port: PORT,
     hmr: {
       overlay: false,
     },
+  },
+  preview: {
+    host: "::",
+    port: PORT,
   },
   plugins: [react()],
   resolve: {
