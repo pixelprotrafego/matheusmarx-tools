@@ -70,7 +70,9 @@ const CSS = `
        elementsFromPoint, que trabalha em coordenadas da janela. */
     position: absolute; top: 0; left: 0; z-index: -1;
     width: max-content; min-width: 900px;
-    /* sem `pointer-events: none` de propósito: ele impediria elementsFromPoint */
+    /* sem "pointer-events: none" de propósito: ele impediria elementsFromPoint.
+       Atenção: nada de crase aqui dentro — este bloco vive num template
+       literal, e uma crase o encerraria no meio, quebrando o arquivo inteiro. */
     background: #ffffff; color: #000000; color-scheme: light;
   }
   .docx-render-host * { color-scheme: light; }

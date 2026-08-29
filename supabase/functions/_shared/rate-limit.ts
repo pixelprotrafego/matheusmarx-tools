@@ -1,13 +1,34 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+/**
+ * IP de quem chamou, para o limite por IP.
+ *
+ * A ordem aqui é uma questão de segurança, não de preferência. `x-forwarded-for`
+ * é uma lista que cresce da esquerda para a direita, e **quem chama controla o
+ * começo dela**: basta mandar `X-Forwarded-For: 1.2.3.4` e a plataforma
+ * acrescenta o IP real no fim. Ler o primeiro item, como se fazia antes,
+ * entregava a cota inteira a quem soubesse trocar um cabeçalho — um laço com
+ * IPs falsos diferentes nunca esbarraria no limite, e cada requisição custa uma
+ * chamada paga à Groq.
+ *
+ * Por isso vem primeiro o `cf-connecting-ip`, que o Cloudflare à frente do
+ * Supabase escreve e sobrescreve, e que quem chama não consegue forjar. Sem ele,
+ * usa-se o **último** item do `x-forwarded-for`, que é o que foi acrescentado
+ * pelo proxy mais próximo e não pelo cliente.
+ */
 export function getClientIp(req: Request): string {
+  const trusted = req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip");
+  if (trusted) return trusted.trim();
+
   const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  return (
-    req.headers.get("cf-connecting-ip") ||
-    req.headers.get("x-real-ip") ||
-    "unknown"
-  );
+  if (xff) {
+    const parts = xff.split(",").map((p) => p.trim()).filter(Boolean);
+    if (parts.length) return parts[parts.length - 1];
+  }
+
+  // Sem nenhuma pista confiável, todos caem no mesmo balde. É restritivo de
+  // propósito: melhor limitar demais do que abrir a torneira.
+  return "unknown";
 }
 
 export interface RateLimitResult {
@@ -66,6 +87,15 @@ const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
   .map((o) => o.trim().toLowerCase())
   .filter(Boolean);
 
+// ATENÇÃO ao alcance real desta checagem: ela impede que **um site de terceiro**
+// use estas functions a partir do navegador, porque aí o navegador é obrigado a
+// enviar o cabeçalho `Origin` e ele não bate. Ela NÃO impede uma chamada por
+// script (curl, Python, etc.), que simplesmente não envia `Origin` nenhum e cai
+// no caso liberado abaixo.
+//
+// Exigir `Origin` sempre não resolveria — quem chama por script forja o valor
+// que quiser. Portanto, quem de fato segura o custo destas functions é o limite
+// por IP, e não esta função. Vale como camada extra, não como tranca.
 export function isAllowedOrigin(req: Request): boolean {
   if (ALLOWED_ORIGINS.length === 0) return true; // checagem desligada
   const origin = req.headers.get("origin");
