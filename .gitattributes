@@ -1,0 +1,34 @@
+# Normaliza a quebra de linha.
+#
+# Sem isto, cada pessoa comita no formato do sistema dela: quem está no Windows
+# grava CRLF, quem está no Linux ou no Mac grava LF, e um arquivo que ninguém
+# editou aparece inteiro no diff só porque foi salvo em outra máquina. Num
+# projeto aberto a contribuições isso vira ruído constante nos pull requests.
+#
+# Tudo o que é texto passa a ser guardado com LF no repositório.
+* text=auto eol=lf
+
+# Arquivos binários não podem sofrer conversão nenhuma: uma "quebra de linha"
+# trocada dentro de uma fonte ou de uma imagem corrompe o arquivo.
+*.woff2 binary
+*.woff  binary
+*.ttf   binary
+*.otf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.docx  binary
+*.xlsx  binary
+*.zip   binary
+*.wasm  binary
+
+# O GitHub conta as linhas destes para dizer de que linguagem é o projeto.
+# Sem a marcação, a licença AGPL sozinha faz o repositório parecer escrito em
+# "Text", e os arquivos gerados poluem a estatística.
+LICENSE            linguist-vendored
+THIRD-PARTY-LICENSES.md linguist-documentation
+public/fonts/*     linguist-vendored
+package-lock.json  linguist-generated
