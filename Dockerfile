@@ -60,6 +60,14 @@ LABEL org.opencontainers.image.title="Matheus Marx Tools" \
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Valida a configuração durante o build.
+#
+# Sem isto, um erro de sintaxe no nginx.conf gera uma imagem que parece pronta e
+# só morre na hora de subir — e a mensagem fica escondida no log do contêiner,
+# não no log do build. Com o `-t`, o build falha na hora, apontando arquivo e
+# linha. Foi assim que um `include mime.types` duplicado passou despercebido.
+RUN nginx -t
+
 EXPOSE 7767
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
