@@ -2,9 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
-/* As fontes Sora e DM Sans são carregadas por <link> no index.html.
-   Um @import aqui seria descartado no build, por vir depois das diretivas
-   do Tailwind — e o site sairia sem a tipografia da marca. */
+/* ---------------------------------------------------------------- tipografia
+ *
+ * As fontes moram em `public/fonts/` e são servidas pelo próprio domínio.
+ *
+ * Antes vinham do Google Fonts por <link> no index.html, e isso era o último
+ * furo na promessa do projeto: mesmo numa instalação Docker sem internet, cada
+ * visita entregava o IP de quem acessa ao Google. Agora uma instalação limpa
+ * não faz nenhuma requisição externa.
+ *
+ * Os arquivos são de peso variável: um único woff2 por família cobre de 300 a
+ * 700, daí o `font-weight: 300 700` — cinco pesos estáticos custariam cinco
+ * downloads em vez de um.
+ *
+ * Aqui vale @font-face, mas NÃO valeria @import: um @import depois das
+ * diretivas do Tailwind é descartado no build, e o site sairia sem a
+ * tipografia da marca.
+ *
+ * As licenças (SIL Open Font License 1.1) ficam ao lado dos arquivos, em
+ * public/fonts/OFL-Sora.txt e public/fonts/OFL-DMSans.txt.
+ */
+
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/sora-v17-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/sora-v17-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/dm-sans-v17-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/dm-sans-v17-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 @layer base {
   :root {

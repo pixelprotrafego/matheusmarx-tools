@@ -8,6 +8,9 @@
     <meta name="description" content="Ferramentas gratuitas no navegador para converter PDF, DOCX, XLSX, imagens, vídeo e áudio. Tudo processado localmente, sem upload.">
     <meta name="author" content="Matheus Marx" />
 
+    <!-- As tags abaixo apontam para a instalação oficial. Um fork que vá ao ar
+         num domínio próprio deve trocar as URLs de og:url, og:image, twitter:image
+         e canonical — veja a seção "Self-hosting" do README. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Matheus Marx Tools" />
     <meta property="og:url" content="https://tools.matheusmarx.com.br/" />
@@ -23,14 +26,20 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="canonical" href="https://tools.matheusmarx.com.br/" />
 
-    <!-- Fontes da marca. Precisam vir por <link> e não por @import dentro do CSS:
-         um @import depois das diretivas do Tailwind é descartado no build. -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap">
+    <!-- Fontes da marca, servidas pelo próprio domínio a partir de public/fonts/.
+         As declarações @font-face estão em src/index.css; aqui só se adianta o
+         download dos dois arquivos que toda página usa, porque o navegador só
+         descobriria a existência deles depois de baixar e interpretar o CSS. -->
+    <link rel="preload" href="/fonts/sora-v17-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/dm-sans-v17-latin.woff2" as="font" type="font/woff2" crossorigin>
 
-    <!-- Segurança: CSP compatível com WASM (FFmpeg, background-removal) e workers locais. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' blob: data: https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://*.supabase.co https://www.facebook.com https://connect.facebook.net; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';">
+    <!-- A Content-Security-Policy NÃO mora mais aqui.
+         Ela é enviada como cabeçalho HTTP pelo servidor, porque só assim dá para
+         ter uma política diferente por instalação: a hospedagem oficial libera o
+         rastreador do Meta, e a imagem Docker de quem roda em casa não libera
+         nada além do próprio domínio. Duas CSPs simultâneas (meta + cabeçalho)
+         se somariam pela interseção e quebrariam uma das duas instalações.
+         Veja `vercel.json` e `docker/nginx.conf`. -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta name="referrer" content="strict-origin-when-cross-origin">
 
@@ -51,26 +60,9 @@
         "url": "https://tools.matheusmarx.com.br/"
       }
     </script>
-
-    <!-- Meta Pixel Code -->
-    <script>
-      !function(f,b,e,v,n,t,s)
-      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-      n.queue=[];t=b.createElement(e);t.async=!0;
-      t.src=v;s=b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t,s)}(window, document,'script',
-      'https://connect.facebook.net/en_US/fbevents.js');
-      fbq('init', '964553763164301');
-      fbq('track', 'PageView');
-    </script>
-    <!-- End Meta Pixel Code -->
   </head>
 
   <body>
-    <!-- Meta Pixel noscript fallback (HTML5 não permite <img> dentro de <head>) -->
-    <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=964553763164301&ev=PageView&noscript=1" alt="" /></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
