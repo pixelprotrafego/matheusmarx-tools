@@ -2,7 +2,7 @@ import { useState, lazy, Suspense } from "react";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Repeat, Wand2, ArrowLeft, FileStack, Type, Loader2, Palette, Calculator as CalcIcon, Mic } from "lucide-react";
+import { Repeat, Wand2, ArrowLeft, FileStack, Type, Loader2, Palette, Calculator as CalcIcon, Mic, Scale } from "lucide-react";
 import SiteHeader from "@/components/site/SiteHeader";
 import Hero from "@/components/site/Hero";
 import SiteFooter from "@/components/site/SiteFooter";
@@ -18,6 +18,7 @@ const TextToolsPanel = lazy(() => import("@/components/tools/TextToolsPanel"));
 const CreativeToolsPanel = lazy(() => import("@/components/tools/CreativeToolsPanel"));
 const CalcToolsPanel = lazy(() => import("@/components/tools/CalcToolsPanel"));
 const VoiceToolsPanel = lazy(() => import("@/components/tools/VoiceToolsPanel"));
+const AdvocaciaToolsPanel = lazy(() => import("@/components/tools/AdvocaciaToolsPanel"));
 
 const PanelFallback = () => (
   <div className="flex items-center justify-center py-16 text-muted-foreground">
@@ -29,6 +30,7 @@ type ClusterKey =
   | "voice-tools"
   | "creative-tools"
   | "calc-tools"
+  | "advocacia-tools"
   | "pdf-tools"
   | "media-edit"
   | "text-tools"
@@ -58,6 +60,14 @@ const clusters = [
     description: "Calculadora científica e conversor de unidades (distância, peso, temperatura e mais)",
     tags: ["Científica", "Distância", "Peso", "Temperatura", "Velocidade", "Volume", "Área", "Tempo"],
     newCount: 2,
+  },
+  {
+    key: "advocacia-tools" as const,
+    icon: Scale,
+    title: "Ferramentas para Advocacia",
+    description: "Contagem de prazos processuais, número CNJ e cálculo de verbas rescisórias",
+    tags: ["Prazos em dias úteis", "Recesso forense", "Validar CNJ", "Gerar CNJ", "Rescisão CLT", "FGTS + multa", "INSS/IRRF"],
+    newCount: 4,
   },
   {
     key: "pdf-tools" as const,
@@ -191,6 +201,7 @@ const Tools = () => {
                     {activeCluster === "voice-tools" && <VoiceToolsPanel />}
                     {activeCluster === "creative-tools" && <CreativeToolsPanel />}
                     {activeCluster === "calc-tools" && <CalcToolsPanel />}
+                    {activeCluster === "advocacia-tools" && <AdvocaciaToolsPanel />}
                     {activeCluster === "pdf-tools" && <PdfToolsPanel />}
                     {activeCluster === "media-edit" && <MediaEditPanel />}
                     {activeCluster === "text-tools" && <TextToolsPanel />}
