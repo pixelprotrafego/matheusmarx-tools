@@ -88,7 +88,8 @@ alguma destas.
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | vazio | Idem |
 | `VITE_SUPABASE_PROJECT_ID` | vazio | Idem |
 | `VITE_ALLOWED_HOSTS` | vazio (desligada) | Hostnames onde a aplicação pode rodar, separados por vírgula. `localhost` é sempre liberado |
-| `VITE_META_PIXEL_ID` | vazio (desligado) | Carrega o Meta Pixel. **Desligado se você não definir** — um fork nunca deve herdar a análise de tráfego de outra pessoa |
+
+Não há variável de analytics, porque não há analytics. Veja abaixo.
 
 O Vite grava esses valores dentro do JavaScript no momento do **build**, e não na
 hora de rodar. No Docker eles são build args; veja o `docker-compose.yml`.
@@ -131,9 +132,12 @@ O que isso custou, e o que significa para você:
   no código apenas como rede de segurança caso essa cópia falte, e a CSP do
   Docker os bloqueia — assim uma cópia faltando falha na sua cara em vez de
   virar uma chamada externa.
-- **Rastreamento** fica desligado a menos que `VITE_META_PIXEL_ID` seja
-  definida. A instalação oficial define; o seu clone não. Por isso a CSP do
-  deploy oficial libera os domínios do Meta, e a de uma instalação própria não.
+- **Não há rastreamento.** Não é "desligado por padrão": não existe. Não há
+  rastreador neste código, e não há nenhum rodando no site oficial. Já houve um
+  pixel da Meta no deploy oficial; ele foi removido, junto com as origens do
+  Meta que a CSP liberava. Ele continua visível no histórico do git, onde um id
+  de pixel é inofensivo: esse id é público por natureza, impresso no HTML de
+  toda página que roda um.
 - **Áudio e voz** enviam áudio e texto para um servidor, como descrito acima.
   São claramente marcadas e ficam desligadas por padrão.
 

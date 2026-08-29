@@ -35,10 +35,11 @@
 
     <!-- A Content-Security-Policy NÃO mora mais aqui.
          Ela é enviada como cabeçalho HTTP pelo servidor, porque só assim dá para
-         ter uma política diferente por instalação: a hospedagem oficial libera o
-         rastreador do Meta, e a imagem Docker de quem roda em casa não libera
-         nada além do próprio domínio. Duas CSPs simultâneas (meta + cabeçalho)
-         se somariam pela interseção e quebrariam uma das duas instalações.
+         ter uma política diferente por instalação: a hospedagem oficial precisa
+         liberar o Supabase, de onde vêm as duas ferramentas de Áudio & Voz, e a
+         imagem Docker de quem roda em casa não libera nada além do próprio
+         domínio. Duas CSPs simultâneas (meta + cabeçalho) se somariam pela
+         interseção e quebrariam uma das duas instalações.
          Veja `vercel.json` e `docker/nginx.conf`. -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta name="referrer" content="strict-origin-when-cross-origin">

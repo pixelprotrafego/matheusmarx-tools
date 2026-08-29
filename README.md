@@ -88,7 +88,8 @@ of these.
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | empty | Same |
 | `VITE_SUPABASE_PROJECT_ID` | empty | Same |
 | `VITE_ALLOWED_HOSTS` | empty (off) | Comma-separated hostnames the app is allowed to run on. `localhost` is always allowed |
-| `VITE_META_PIXEL_ID` | empty (off) | Loads the Meta Pixel. **Off unless you set it** — a fork should never inherit someone else's analytics |
+
+There is no analytics variable, because there is no analytics. See below.
 
 Vite bakes these into the bundle at **build** time, not at run time. In Docker
 they are build args; see `docker-compose.yml`.
@@ -130,9 +131,12 @@ What that took, and what it means for you:
 - **ffmpeg** is served from your own domain too. `unpkg`/`jsdelivr` remain in the
   code only as a fallback if that copy is missing, and the Docker CSP blocks
   them, so a missing copy fails loudly rather than phoning out.
-- **Analytics** are off unless `VITE_META_PIXEL_ID` is set. The official
-  instance sets it; your clone does not. The official deployment's CSP therefore
-  allows the Meta domains — a self-hosted one does not.
+- **There is no analytics.** Not "off by default" — absent. No tracker ships in
+  this code, and none runs on the official site either. There used to be a Meta
+  Pixel on the official deployment; it was removed, along with the Meta origins
+  that used to be allowed in the CSP. It is still visible in the git history,
+  where a pixel id is harmless: that id is public by design, printed in the HTML
+  of every page that runs one.
 - **Audio & voice** send audio and text to a server, as described above. They
   are visibly marked and disabled by default.
 
