@@ -35,6 +35,18 @@ supabase/.branches/
 # de cada `npm run dev` e `npm run build`.
 public/ffmpeg/
 
+# Área de trabalho local, fora do repositório de propósito.
+#
+# `docs/` é onde ficam arquivos descartáveis: rascunho, anotação, guia de
+# passo a passo, arquivo de teste de conversão. Nada disso é o produto, e o
+# repositório é público — o que entra em commit entra no histórico e não sai
+# mais dele sem reescrever tudo. Por isso a pasta inteira fica de fora, em vez
+# de depender de alguém lembrar de não usar `git add -A`.
+#
+# Para versionar algo daqui de propósito, force o arquivo específico:
+#     git add -f docs/o-arquivo.md
+docs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
