@@ -182,7 +182,13 @@ const Tools = () => {
             })}
           </div>
         ) : (
-          <div className="animate-fade-in">
+          // `fade-in-flat`, e não `fade-in`: a versão com deslocamento termina
+          // com um `transform` aplicado (a animação roda com `forwards`), e um
+          // ancestral com transform prende o `position: fixed` de tudo o que
+          // vem abaixo. O Notepad e a Prancheta abrem em tela cheia a partir
+          // daqui, e ficavam presos dentro deste div em vez de cobrir a janela.
+          // Se um dia voltar a ser `animate-fade-in`, o modo expandido quebra.
+          <div className="animate-fade-in-flat">
             <Card className="border-border bg-card">
               <CardHeader>
                 <h2 className="text-xl font-semibold leading-none tracking-tight">

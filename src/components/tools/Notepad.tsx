@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
+import { Extension } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { Underline } from "@tiptap/extension-underline";
 import { TextStyle, FontSize } from "@tiptap/extension-text-style";
@@ -17,11 +18,13 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, ListChecks, Quote, Code, Heading1, Heading2, Heading3,
   Undo2, Redo2, Trash2, Download, FileText, FileType, FileCode, FileImage,
+  Maximize2, Minimize2,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toTxt, toMd, toHtml, toPdf, toDocx } from "@/lib/notepad-export";
+import { useExpanded } from "@/hooks/use-expanded";
 
 const STORAGE_KEY = "mm-notepad-draft";
 const MAX_CHARS = 500_000;
@@ -36,16 +39,35 @@ const FONT_FAMILIES = [
 
 const FONT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 40, 48, 60, 72];
 
+/**
+ * Atalhos que faltavam ou que o navegador costuma roubar.
+ *
+ * O tachado já vinha com `Ctrl+Shift+S` de fábrica no TipTap, mas esse combo é
+ * a captura de tela do Microsoft Edge, que o intercepta antes de a página ver.
+ * `Ctrl+Shift+X` fica livre nos navegadores e passa a valer também — os dois
+ * funcionam, ninguém perde o que já usava.
+ */
+const AtalhosExtras = Extension.create({
+  name: "atalhosExtras",
+  addKeyboardShortcuts() {
+    return {
+      "Mod-Shift-x": () => this.editor.commands.toggleStrike(),
+    };
+  },
+});
+
 const ToolbarButton = ({
-  active, onClick, label, children, disabled,
-}: { active?: boolean; onClick: () => void; label: string; children: React.ReactNode; disabled?: boolean }) => (
+  active, onClick, label, shortcut, children, disabled,
+}: { active?: boolean; onClick: () => void; label: string; shortcut?: string; children: React.ReactNode; disabled?: boolean }) => (
   <Button
     type="button"
     size="sm"
     variant={active ? "default" : "ghost"}
     onClick={onClick}
     aria-label={label}
-    title={label}
+    // O atalho vai na dica do botão: era o único lugar onde ele podia ser
+    // descoberto sem alguém ter que adivinhar ou ler documentação.
+    title={shortcut ? `${label} — ${shortcut}` : label}
     disabled={disabled}
     className="h-8 w-8 p-0"
   >
@@ -56,10 +78,12 @@ const ToolbarButton = ({
 const Notepad = () => {
   const contentRef = useRef<HTMLDivElement>(null);
   const [fontSize, setFontSize] = useState("16");
+  const { expanded, toggle } = useExpanded();
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      AtalhosExtras,
       Underline,
       TextStyle,
       FontSize,
@@ -125,8 +149,14 @@ const Notepad = () => {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-1 p-2 rounded-lg border border-border bg-secondary/40">
+    <div
+      className={expanded ? "fixed inset-0 z-50 flex flex-col gap-3 bg-background p-4" : "space-y-3"}
+      // `margin: 0` no modo expandido: o painel que hospeda a ferramenta usa
+      // `space-y-4`, que dá `margin-top: 1rem` a cada filho. Margem desloca
+      // também elemento posicionado, e o overlay abria 16px abaixo do topo.
+      style={expanded ? { margin: 0 } : undefined}
+    >
+      <div className="flex flex-wrap items-center gap-1 p-2 rounded-lg border border-border bg-secondary/40 shrink-0">
         <Select value="" onValueChange={(v) => editor.chain().focus().setFontFamily(v).run()}>
           <SelectTrigger className="h-8 w-[120px] text-xs"><SelectValue placeholder="Fonte" /></SelectTrigger>
           <SelectContent>
@@ -143,11 +173,11 @@ const Notepad = () => {
 
         <div className="w-px h-6 bg-border mx-1" />
 
-        <ToolbarButton active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} label="Negrito"><Bold className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()} label="Itálico"><Italic className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()} label="Sublinhado"><UnderlineIcon className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()} label="Tachado"><Strikethrough className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()} label="Código inline"><Code className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()} label="Negrito" shortcut="Ctrl+B"><Bold className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()} label="Itálico" shortcut="Ctrl+I"><Italic className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()} label="Sublinhado" shortcut="Ctrl+U"><UnderlineIcon className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()} label="Tachado" shortcut="Ctrl+Shift+X"><Strikethrough className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()} label="Código inline" shortcut="Ctrl+E"><Code className="w-4 h-4" /></ToolbarButton>
 
         <label className="inline-flex items-center gap-1 px-1" title="Cor do texto">
           <input
@@ -168,30 +198,34 @@ const Notepad = () => {
 
         <div className="w-px h-6 bg-border mx-1" />
 
-        <ToolbarButton active={editor.isActive("heading", { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} label="Título 1"><Heading1 className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} label="Título 2"><Heading2 className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive("heading", { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} label="Título 3"><Heading3 className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()} label="Citação"><Quote className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("heading", { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} label="Título 1" shortcut="Ctrl+Alt+1"><Heading1 className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} label="Título 2" shortcut="Ctrl+Alt+2"><Heading2 className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("heading", { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} label="Título 3" shortcut="Ctrl+Alt+3"><Heading3 className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()} label="Citação" shortcut="Ctrl+Shift+B"><Quote className="w-4 h-4" /></ToolbarButton>
 
         <div className="w-px h-6 bg-border mx-1" />
 
-        <ToolbarButton active={editor.isActive({ textAlign: "left" })} onClick={() => editor.chain().focus().setTextAlign("left").run()} label="Esquerda"><AlignLeft className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive({ textAlign: "center" })} onClick={() => editor.chain().focus().setTextAlign("center").run()} label="Centro"><AlignCenter className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive({ textAlign: "right" })} onClick={() => editor.chain().focus().setTextAlign("right").run()} label="Direita"><AlignRight className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive({ textAlign: "justify" })} onClick={() => editor.chain().focus().setTextAlign("justify").run()} label="Justificado"><AlignJustify className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive({ textAlign: "left" })} onClick={() => editor.chain().focus().setTextAlign("left").run()} label="Esquerda" shortcut="Ctrl+Shift+L"><AlignLeft className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive({ textAlign: "center" })} onClick={() => editor.chain().focus().setTextAlign("center").run()} label="Centro" shortcut="Ctrl+Shift+E"><AlignCenter className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive({ textAlign: "right" })} onClick={() => editor.chain().focus().setTextAlign("right").run()} label="Direita" shortcut="Ctrl+Shift+R"><AlignRight className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive({ textAlign: "justify" })} onClick={() => editor.chain().focus().setTextAlign("justify").run()} label="Justificado" shortcut="Ctrl+Shift+J"><AlignJustify className="w-4 h-4" /></ToolbarButton>
 
         <div className="w-px h-6 bg-border mx-1" />
 
-        <ToolbarButton active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()} label="Lista com bullets"><List className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} label="Lista numerada"><ListOrdered className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton active={editor.isActive("taskList")} onClick={() => editor.chain().focus().toggleTaskList().run()} label="Checklist"><ListChecks className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()} label="Lista com bullets" shortcut="Ctrl+Shift+8"><List className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} label="Lista numerada" shortcut="Ctrl+Shift+7"><ListOrdered className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton active={editor.isActive("taskList")} onClick={() => editor.chain().focus().toggleTaskList().run()} label="Checklist" shortcut="Ctrl+Shift+9"><ListChecks className="w-4 h-4" /></ToolbarButton>
 
         <div className="w-px h-6 bg-border mx-1" />
 
-        <ToolbarButton onClick={() => editor.chain().focus().undo().run()} label="Desfazer" disabled={!editor.can().undo()}><Undo2 className="w-4 h-4" /></ToolbarButton>
-        <ToolbarButton onClick={() => editor.chain().focus().redo().run()} label="Refazer" disabled={!editor.can().redo()}><Redo2 className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton onClick={() => editor.chain().focus().undo().run()} label="Desfazer" shortcut="Ctrl+Z" disabled={!editor.can().undo()}><Undo2 className="w-4 h-4" /></ToolbarButton>
+        <ToolbarButton onClick={() => editor.chain().focus().redo().run()} label="Refazer" shortcut="Ctrl+Shift+Z" disabled={!editor.can().redo()}><Redo2 className="w-4 h-4" /></ToolbarButton>
 
         <div className="flex-1" />
+
+        <ToolbarButton onClick={toggle} label={expanded ? "Reduzir" : "Expandir"} shortcut={expanded ? "Esc" : undefined} active={expanded}>
+          {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </ToolbarButton>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -209,16 +243,28 @@ const Notepad = () => {
         <ToolbarButton onClick={clear} label="Limpar tudo"><Trash2 className="w-4 h-4" /></ToolbarButton>
       </div>
 
+      {/*
+        Sem teto de altura: antes havia um `maxHeight: 90vh` que fazia a alça de
+        redimensionar parar no meio do arrasto, sem explicar por quê. Agora quem
+        usa decide até onde puxar, e a página rola junto se passar da janela.
+        A largura continua presa em 100% de propósito — esticar para os lados
+        não daria mais espaço de escrita, só empurraria a caixa para fora do
+        cartão do site.
+      */}
       <div
         ref={contentRef}
-        className="rounded-lg border border-border bg-background tiptap-shell overflow-auto resize-y w-full"
-        style={{ height: "60vh", minHeight: 280, maxHeight: "90vh" }}
-        title="Arraste o canto inferior direito para redimensionar"
+        className={
+          expanded
+            ? "flex-1 min-h-0 rounded-lg border border-border bg-background tiptap-shell overflow-auto w-full"
+            : "rounded-lg border border-border bg-background tiptap-shell overflow-auto resize-y w-full"
+        }
+        style={expanded ? undefined : { height: "60vh", minHeight: 280, maxWidth: "100%" }}
+        title={expanded ? undefined : "Arraste o canto inferior direito para aumentar a altura"}
       >
         <EditorContent editor={editor} />
       </div>
 
-      <div className="flex justify-between text-xs text-muted-foreground px-2">
+      <div className="flex justify-between text-xs text-muted-foreground px-2 shrink-0">
         <span>{wordCount} palavras · {charCount.toLocaleString()} caracteres</span>
         <span>Rascunho salvo automaticamente</span>
       </div>

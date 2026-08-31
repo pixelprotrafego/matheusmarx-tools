@@ -85,6 +85,15 @@ export default {
           from: { opacity: "0", transform: "translateY(20px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        // Igual à de cima, sem o deslocamento. Existe porque `fade-in` roda com
+        // `forwards` e deixa `transform: translateY(0)` aplicado para sempre —
+        // e um ancestral com transform vira o bloco de contenção de qualquer
+        // `position: fixed` abaixo dele. Onde há ferramenta que abre em tela
+        // cheia, a entrada precisa ser só de opacidade.
+        "fade-in-flat": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
         "shimmer": {
           from: { backgroundPosition: "200% 0" },
           to: { backgroundPosition: "-200% 0" },
@@ -94,6 +103,7 @@ export default {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.6s ease-out forwards",
+        "fade-in-flat": "fade-in-flat 0.4s ease-out forwards",
         "shimmer": "shimmer 3s ease-in-out infinite",
       },
     },
