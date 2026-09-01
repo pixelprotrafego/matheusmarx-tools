@@ -19,8 +19,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 20 é o mínimo declarado em package.json; 22 avisa cedo sobre quebras
-        # na próxima LTS.
+        # As duas pontas do `engines` do package.json (^20.19 || >=22.12), que é
+        # o que o Vite 8 exige. O 20 confere o piso ainda suportado; o 22 é a
+        # LTS atual e avisa cedo sobre quebras.
         node: [20, 22]
 
     steps:

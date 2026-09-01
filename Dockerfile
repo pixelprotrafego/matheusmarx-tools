@@ -13,14 +13,19 @@
 # ------------------------------------------------------------------ construção
 #
 # Debian (`slim`) e não Alpine neste estágio, de propósito. Vários pacotes da
-# árvore trazem binários compilados — rollup, swc, esbuild, canvas — e os
+# árvore trazem binários compilados — rolldown, lightningcss, canvas — e os
 # pré-compilados para glibc são o caminho testado por todo mundo; os de musl,
 # que o Alpine usa, faltam com mais frequência e a queda é para compilar na
 # hora, o que exige compilador e bibliotecas que a imagem não tem.
 #
 # Não custa tamanho: este estágio inteiro é descartado, e o que vai para o
 # registro é só a imagem final de nginx sobre Alpine.
-FROM node:20-slim AS build
+#
+# Node 22 (LTS) e não 20: o Vite 8 exige `^20.19 || >=22.12`, e o 20 já saiu do
+# suporte, o que significa imagem base sem correção de segurança. Como este
+# estágio é descartado, subir a versão aqui não pesa no que vai para o
+# registro — e o CI continua conferindo o piso 20 declarado em `engines`.
+FROM node:22-slim AS build
 
 WORKDIR /app
 

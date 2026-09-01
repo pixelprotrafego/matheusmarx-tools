@@ -61,7 +61,7 @@ docker compose up -d --build # rebuild after pulling changes
 
 ### From source
 
-Requires **Node.js 20+**.
+Requires **Node.js 20.19+ or 22.12+** (what Vite 8 needs).
 
 ```sh
 npm install

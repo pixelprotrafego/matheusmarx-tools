@@ -12,7 +12,13 @@
  *   node scripts/telegram-setup.mjs delete
  *
  * O token vem da variável de ambiente TELEGRAM_BOT_TOKEN (ou TELEGRAM_API_KEY).
- * No PowerShell:  $env:TELEGRAM_BOT_TOKEN = "123456:ABC..."
+ * No PowerShell:  $env:TELEGRAM_BOT_TOKEN = "<cole-o-token-aqui>"
+ *
+ * Os exemplos aqui e na mensagem de erro abaixo são propositalmente marcadores
+ * entre <>, e não um token de mentira com a cara de um de verdade. Um token
+ * falso mas com o formato correto dispara o secret scanning do GitHub em quem
+ * clonar o repositório, e o alerta é indistinguível de um vazamento real até
+ * alguém ir conferir à mão.
  */
 
 import { createHash } from "node:crypto";
@@ -23,10 +29,17 @@ if (!token) {
   console.error("Erro: defina TELEGRAM_BOT_TOKEN no ambiente antes de rodar.");
   console.error();
   console.error("É o token do BOT, que o @BotFather entrega quando você cria o bot.");
-  console.error("Tem números, dois-pontos e uma sequência longa de letras:");
-  console.error("  123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw");
+  console.error("Não é o seu id de usuário do Telegram, nem o nome do bot.");
   console.error();
-  console.error('PowerShell:  $env:TELEGRAM_BOT_TOKEN = "123456789:AAH..."');
+  console.error("Formato: o id numérico do bot, dois-pontos, e cerca de 35");
+  console.error("caracteres entre letras, números, hífen e sublinhado:");
+  console.error("  <id-numérico-do-bot>:<sequência-de-~35-caracteres>");
+  console.error();
+  console.error("Onde achar: no Telegram, fale com @BotFather, mande /mybots,");
+  console.error("escolha o seu bot e toque em 'API Token'.");
+  console.error();
+  console.error('PowerShell:  $env:TELEGRAM_BOT_TOKEN = "<cole-o-token-aqui>"');
+  console.error('bash:        export TELEGRAM_BOT_TOKEN="<cole-o-token-aqui>"');
   process.exit(1);
 }
 
