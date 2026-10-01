@@ -44,7 +44,9 @@ background-removal tool and of swapping the video engine for an LGPL build.
 | `class-variance-authority`, `clsx`, `tailwind-merge` | MIT |
 | `next-themes` | MIT |
 | `react-resizable-panels` | MIT |
-| `@supabase/supabase-js` | MIT |
+| `@upstash/redis` (server only) | MIT |
+| `unpdf`, `jimp` (server only) | MIT |
+| `mammoth` (server only) | BSD-2-Clause |
 | `pdfjs-dist` | Apache-2.0 |
 | `docx-preview` | Apache-2.0 |
 | `xlsx` (SheetJS) | Apache-2.0 |
@@ -57,7 +59,8 @@ background-removal tool and of swapping the video engine for an LGPL build.
 | --- | --- |
 | **Sora** (v17) | SIL Open Font License 1.1. Bundled in `public/fonts/`, served from the application's own domain. Licence text: `public/fonts/OFL-Sora.txt`. |
 | **DM Sans** (v17) | SIL Open Font License 1.1. Bundled in `public/fonts/`. Licence text: `public/fonts/OFL-DMSans.txt`. |
-| **Groq API** (Whisper, Orpheus) | Third-party service, used only by the two Audio & Voice tools and only when you configure your own credentials. |
+| **Groq API** (Whisper, Orpheus) | Third-party service, called only by the server functions in `api/` for the two Audio & Voice tools and the Telegram bot, and only when you configure your own credentials. |
+| **Upstash Redis** | Third-party service holding only short-lived rate-limit counters and bot state, when you configure it. |
 
 The OFL allows bundling and redistributing the fonts, including inside this
 repository and the Docker image, as long as the licence travels with them and

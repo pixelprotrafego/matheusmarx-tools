@@ -8,15 +8,16 @@ import { Loader2, Mic, Copy, Download, FileText, Square, Pause, Play, Upload, Ro
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import Dropzone from "./shared/Dropzone";
+import { useVoiceStatus, VoiceUnavailable } from "./shared/VoiceAvailability";
 import { X } from "lucide-react";
-import { getSupabase } from "@/integrations/supabase/client";
 import { consume, formatReset } from "@/lib/rate-limit";
 import { downloadBlob } from "@/lib/download";
+import {
+  LIMITE_DE_ENTRADA, prepararAudioParaEnvio, transcribe as enviarParaTranscricao,
+  type ApiError, type TranscriptionResult as Result, type TranscriptionSegment as Segment,
+} from "@/lib/voice-api";
 
-interface Segment { id: number; start: number; end: number; text: string }
-interface Result { text: string; language?: string; duration?: number; segments?: Segment[] }
-
-const MAX_MB = 25;
+const MAX_MB = LIMITE_DE_ENTRADA / (1024 * 1024);
 const MAX_RECORD_SECONDS = 10 * 60; // 10 minutos
 
 const LANGS = [
@@ -70,8 +71,10 @@ const AudioTranscriber = () => {
   const [lang, setLang] = useState("auto");
   const [withTimestamps, setWithTimestamps] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [mode, setMode] = useState<"upload" | "record">("upload");
+  const voz = useVoiceStatus();
 
   // Recording state
   const [recState, setRecState] = useState<"idle" | "recording" | "paused" | "ready">("idle");
@@ -186,8 +189,8 @@ const AudioTranscriber = () => {
   const onFiles = (fs: File[]) => {
     const f = fs[0];
     if (!f) return;
-    if (f.size > MAX_MB * 1024 * 1024) {
-      toast.error(`Arquivo excede ${MAX_MB} MB (limite da API).`);
+    if (f.size > LIMITE_DE_ENTRADA) {
+      toast.error(`Arquivo excede ${MAX_MB} MB.`);
       return;
     }
     setFile(f);
@@ -205,30 +208,20 @@ const AudioTranscriber = () => {
     }
     setLoading(true);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("language", lang);
-      form.append("response_format", withTimestamps ? "verbose_json" : "json");
-
-      const { data, error } = await getSupabase().functions.invoke("transcribe-audio", {
-        body: form,
-      });
-      if (error) throw error;
-      const d = data as { error?: string; code?: string; resetInMs?: number };
-      if (d?.error) {
-        if (d.code === "rate_limited") {
-          toast.error("Limite atingido", { description: `Tente novamente em ${formatReset(d.resetInMs ?? 0)}.` });
-          return;
-        }
-        throw new Error(d.error);
-      }
-      setResult(data as Result);
+      const envio = await prepararAudioParaEnvio(file, setStatus);
+      setStatus("Transcrevendo...");
+      setResult(await enviarParaTranscricao(envio, { language: lang, withTimestamps }));
       toast.success("Transcrição concluída!");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Falha ao transcrever";
-      toast.error("Erro na transcrição", { description: msg });
+      const e = err as ApiError;
+      if (e.code === "rate_limited") {
+        toast.error("Limite atingido", { description: `Tente novamente em ${formatReset(e.resetInMs ?? 0)}.` });
+      } else {
+        toast.error("Erro na transcrição", { description: e.message || "Falha ao transcrever" });
+      }
     } finally {
       setLoading(false);
+      setStatus(null);
     }
   };
 
@@ -276,7 +269,7 @@ const AudioTranscriber = () => {
               onFiles={onFiles}
               accept="audio/*,.mp3,.m4a,.wav,.ogg,.opus,.webm,.flac"
               title="Solte um arquivo de áudio"
-              hint={`MP3, M4A, WAV, OGG, OPUS, WEBM, FLAC — até ${MAX_MB} MB`}
+              hint={`MP3, M4A, WAV, OGG, OPUS, WEBM, FLAC — até ${MAX_MB} MB. Acima de 4 MB, o áudio é comprimido no seu navegador antes do envio.`}
               sizeKind="audio"
             />
           ) : (
@@ -378,10 +371,14 @@ const AudioTranscriber = () => {
         </div>
       </div>
 
-      <Button onClick={transcribe} disabled={!file || loading} className="w-full md:w-auto gap-2">
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-        {loading ? "Transcrevendo..." : "Transcrever áudio"}
-      </Button>
+      {voz && "reason" in voz ? (
+        <VoiceUnavailable reason={voz.reason} />
+      ) : (
+        <Button onClick={transcribe} disabled={!file || loading || !voz} className="w-full md:w-auto gap-2">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+          {loading ? (status ?? "Transcrevendo...") : "Transcrever áudio"}
+        </Button>
+      )}
 
       {result && (
         <div className="space-y-3 animate-fade-in">

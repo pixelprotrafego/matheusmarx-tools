@@ -2,12 +2,12 @@
 /**
  * Configura o webhook do bot do Telegram.
  *
- * Antes isso era feito pelo painel da Lovable. Agora que o bot fala direto com
- * api.telegram.org, o registro do webhook é nosso — este script faz isso.
+ * O bot roda na função api/telegram.ts, na Vercel. Este script diz ao Telegram
+ * para onde mandar as mensagens e com qual segredo.
  *
  * Uso:
  *   node scripts/telegram-setup.mjs status
- *   node scripts/telegram-setup.mjs set https://<projeto>.supabase.co/functions/v1/telegram-webhook
+ *   node scripts/telegram-setup.mjs set https://<seu-dominio>/api/telegram
  *   node scripts/telegram-setup.mjs chat-id
  *   node scripts/telegram-setup.mjs delete
  *
@@ -46,8 +46,8 @@ if (!token) {
 const API = `https://api.telegram.org/bot${token}`;
 
 /**
- * Precisa bater exatamente com deriveWebhookSecret() em
- * supabase/functions/_shared/telegram.ts — é o valor que o Telegram devolve
+ * Precisa bater exatamente com deriveWebhookSecret() em api/_lib/telegram.ts —
+ * há um teste conferindo isso. É o valor que o Telegram devolve
  * no cabeçalho X-Telegram-Bot-Api-Secret-Token a cada update.
  */
 function webhookSecret() {
@@ -81,15 +81,15 @@ async function status() {
     console.log(`Último erro: ${info.last_error_message} (em ${new Date((info.last_error_date ?? 0) * 1000).toISOString()})`);
   }
   const armed = Boolean(info.has_custom_certificate) || info.url;
-  if (armed && !info.url.includes("/functions/v1/telegram-webhook")) {
-    console.log("Aviso: a URL registrada não parece ser a edge function deste projeto.");
+  if (armed && !info.url.endsWith("/api/telegram")) {
+    console.log("Aviso: a URL registrada não termina em /api/telegram, que é a função deste projeto.");
   }
 }
 
 async function set(url) {
   if (!url) {
-    console.error("Informe a URL da function. Ex.:");
-    console.error("  node scripts/telegram-setup.mjs set https://SEU-PROJETO.supabase.co/functions/v1/telegram-webhook");
+    console.error("Informe a URL da função do bot: o endereço do site + /api/telegram. Ex.:");
+    console.error("  node scripts/telegram-setup.mjs set https://tools.matheusmarx.com.br/api/telegram");
     process.exit(1);
   }
   const secret = webhookSecret();
@@ -103,13 +103,14 @@ async function set(url) {
   console.log(`URL:    ${url}`);
   console.log(`Secret: ${secret}`);
   console.log();
-  console.log("O secret é derivado do próprio token, então a edge function o recalcula");
+  console.log("O secret é derivado do próprio token, então a função o recalcula");
   console.log("sozinha — não precisa guardá-lo em lugar nenhum.");
   console.log();
-  console.log("Confirme que estes secrets existem no Supabase:");
-  console.log("  supabase secrets set TELEGRAM_BOT_TOKEN=<o mesmo token>");
-  console.log("  supabase secrets set GROQ_API_KEY=<sua chave da Groq>");
-  console.log("  supabase secrets set TELEGRAM_ALLOWED_CHAT_IDS=<seu chat id>");
+  console.log("Confirme que estas variáveis existem na Vercel (Settings → Environment");
+  console.log("Variables), e que houve um deploy depois de cadastrá-las:");
+  console.log("  TELEGRAM_BOT_TOKEN         o mesmo token usado aqui");
+  console.log("  TELEGRAM_ALLOWED_CHAT_IDS  o id da sua conta (npm run telegram chat-id)");
+  console.log("  GROQ_API_KEY               sua chave da Groq, para transcrever áudio");
 }
 
 async function chatId() {
@@ -141,9 +142,10 @@ async function chatId() {
   for (const [id, name] of seen) console.log(`  ${id}  ${name}`);
   console.log();
   console.log("Este número identifica a SUA conta do Telegram, não o bot — é ele");
-  console.log("que autoriza você a usar o bot. Cadastre no Supabase:");
+  console.log("que autoriza você a usar o bot. Cadastre na Vercel, em Settings →");
+  console.log("Environment Variables, e faça um novo deploy:");
   const first = [...seen.keys()][0];
-  console.log(`  supabase secrets set TELEGRAM_ALLOWED_CHAT_IDS=${first}`);
+  console.log(`  TELEGRAM_ALLOWED_CHAT_IDS = ${first}`);
   console.log();
   console.log("Para liberar mais de uma pessoa, separe os ids por vírgula.");
 }

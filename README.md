@@ -70,50 +70,67 @@ npm run dev      # http://localhost:7767
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Dev server with hot reload |
+| `npm run dev` | Dev server with hot reload (site only — see below for audio) |
 | `npm run build` | Production build into `dist/` |
 | `npm run preview` | Serve the production build locally |
 | `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript, no emit |
-| `npm test` | Vitest |
+| `npm run typecheck` | TypeScript for the site and for `api/`, no emit |
+| `npm test` | Vitest — site and server tests, no credentials needed |
 
 ## Configuration
 
 **Everything is optional.** Copy `.env.example` to `.env` only if you need one
-of these.
+of these. Each variable there is explained, including where to get it.
 
-| Variable | Default | What it does |
+| Variable | Read by | What it does |
 | --- | --- | --- |
-| `VITE_SUPABASE_URL` | empty | Enables the two Audio & Voice tools |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | empty | Same |
-| `VITE_SUPABASE_PROJECT_ID` | empty | Same |
-| `VITE_ALLOWED_HOSTS` | empty (off) | Comma-separated hostnames the app is allowed to run on. `localhost` is always allowed |
+| `VITE_ALLOWED_HOSTS` | site (build) | Comma-separated hostnames the app may run on. Empty means anywhere. `localhost` is always allowed |
+| `GROQ_API_KEY` | `api/` | Enables speech-to-text and text-to-speech |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | `api/` | Rate limits and Telegram bot state. `KV_REST_API_*`, injected by the Vercel integration, also work |
+| `TELEGRAM_BOT_TOKEN` | `api/` | Optional Telegram bot |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | `api/` | Chat ids allowed to use the bot. Empty means nobody |
 
 There is no analytics variable, because there is no analytics. See below.
 
-Vite bakes these into the bundle at **build** time, not at run time. In Docker
-they are build args; see `docker-compose.yml`.
+`VITE_*` variables are baked into the JavaScript at **build** time, so only
+public values may go there. Everything else is read by the server functions at
+run time and never reaches the browser.
 
 ## The one exception to "everything is local"
 
 Speech-to-text and text-to-speech cannot run in the browser at acceptable
-quality, so they call Supabase edge functions in `supabase/functions/`, which in
-turn call the Groq API (Whisper and Orpheus).
+quality, so they go through two small server functions in `api/` —
+`/api/transcribe` and `/api/tts` — which call the Groq API (Whisper and
+Orpheus). They run on Vercel, on the same domain as the site: no API key or
+third-party address is shipped to the browser.
 
-**Without Supabase configured, those two tools show a message explaining they are
-disabled. Nothing else is affected.** If you want them, you need your own
-Supabase project:
+**Wherever those functions don't exist — the Docker image, or a plain
+`npm run dev` — the two tools show a message explaining why, and nothing else is
+affected.** The site asks `/api/health` before showing them.
 
-| Secret | Where | What for |
-| --- | --- | --- |
-| `GROQ_API_KEY` | Supabase | Groq API access |
-| `ALLOWED_ORIGINS` | Supabase | Origins allowed to call the functions. Empty disables the check |
-| `TELEGRAM_BOT_TOKEN` | Supabase | Optional Telegram bot |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | Supabase | Chat ids allowed to use the bot. Empty means nobody |
+Audio files over 4 MB are recompressed **in your browser** before upload, to
+mono Opus at 16 kHz, because Vercel caps request bodies at 4.5 MB. That costs no
+accuracy: Whisper converts every input to 16 kHz mono before transcribing.
 
-The database stores only disposable data: per-IP rate-limit counters and files
-awaiting a Telegram action, both expiring within minutes. No user content is
-ever stored.
+The server keeps only disposable data in Redis — per-IP rate-limit counters and
+Telegram files awaiting an action, all expiring within minutes. Nothing you
+upload is stored, and the bot stores only Telegram's file id, never the file.
+
+### Running the audio tools yourself
+
+1. Deploy the repository to Vercel (it is detected as a Vite project; `api/` is
+   picked up automatically).
+2. In the project, open **Storage → Create Database → Upstash for Redis** and
+   connect it. The Redis credentials are added to the project for you.
+3. In **Settings → Environment Variables**, add `GROQ_API_KEY` (from
+   <https://console.groq.com/keys>, starts with `gsk_`).
+4. Redeploy. To try the functions locally, use `vercel dev` instead of
+   `npm run dev`.
+
+The Telegram bot is optional: add `TELEGRAM_BOT_TOKEN` and
+`TELEGRAM_ALLOWED_CHAT_IDS`, redeploy, then point Telegram at it with
+`npm run telegram set https://<your-domain>/api/telegram`. Run
+`npm run telegram` with no arguments for the other commands.
 
 ## Honest privacy notes
 
@@ -138,7 +155,7 @@ What that took, and what it means for you:
   where a pixel id is harmless: that id is public by design, printed in the HTML
   of every page that runs one.
 - **Audio & voice** send audio and text to a server, as described above. They
-  are visibly marked and disabled by default.
+  are visibly marked, and absent from a self-hosted install.
 
 Everything else — every conversion, every PDF operation, every image and video
 edit — happens in the tab and touches no network.
@@ -163,6 +180,8 @@ security control — with the source public, anyone can remove it.
 - **ffmpeg.wasm** — audio and video
 - **fabric** — drawing board · **TipTap** — rich-text editor
 - **@imgly/background-removal** — background removal via a local model
+- **Vercel Functions** (`api/`) + **Upstash Redis** — the audio tools and the
+  Telegram bot, the only server-side code
 
 The PDF → Word engine lives in `src/lib/pdf-to-docx/` and is documented
 module by module; `scripts/diagnostico-pdf-docx.mjs` runs it in a real Chromium

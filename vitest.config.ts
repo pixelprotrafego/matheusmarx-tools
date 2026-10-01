@@ -8,7 +8,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // Os testes do servidor declaram `@vitest-environment node` no topo: lá não
+    // há DOM, e o jsdom mascararia diferenças reais de Request/FormData.
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "api/**/*.test.ts"],
   },
   resolve: {
     // `import.meta.dirname`, e não `__dirname`: o carregador de configuração

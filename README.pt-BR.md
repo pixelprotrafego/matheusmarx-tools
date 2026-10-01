@@ -70,50 +70,69 @@ npm run dev      # http://localhost:7767
 
 | Comando | O que faz |
 | --- | --- |
-| `npm run dev` | Servidor de desenvolvimento com recarga automática |
+| `npm run dev` | Servidor de desenvolvimento com recarga automática (só o site — veja abaixo para o áudio) |
 | `npm run build` | Build de produção em `dist/` |
 | `npm run preview` | Serve o build de produção localmente |
 | `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript, sem gerar arquivos |
-| `npm test` | Vitest |
+| `npm run typecheck` | TypeScript do site e do `api/`, sem gerar arquivos |
+| `npm test` | Vitest — testes do site e do servidor, sem precisar de credencial |
 
 ## Configuração
 
 **Tudo é opcional.** Copie `.env.example` para `.env` apenas se precisar de
-alguma destas.
+alguma destas. Cada variável vem explicada lá, inclusive onde obtê-la.
 
-| Variável | Padrão | Para que serve |
+| Variável | Quem lê | Para que serve |
 | --- | --- | --- |
-| `VITE_SUPABASE_URL` | vazio | Liga as duas ferramentas de Áudio e Voz |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | vazio | Idem |
-| `VITE_SUPABASE_PROJECT_ID` | vazio | Idem |
-| `VITE_ALLOWED_HOSTS` | vazio (desligada) | Hostnames onde a aplicação pode rodar, separados por vírgula. `localhost` é sempre liberado |
+| `VITE_ALLOWED_HOSTS` | site (build) | Hostnames onde a aplicação pode rodar, separados por vírgula. Vazio = qualquer lugar. `localhost` é sempre liberado |
+| `GROQ_API_KEY` | `api/` | Liga a transcrição e o texto para fala |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | `api/` | Limite por IP e estado do bot do Telegram. Os `KV_REST_API_*`, que a integração da Vercel cadastra, também valem |
+| `TELEGRAM_BOT_TOKEN` | `api/` | Bot do Telegram, opcional |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | `api/` | Chat ids autorizados a usar o bot. Vazio = ninguém |
 
 Não há variável de analytics, porque não há analytics. Veja abaixo.
 
-O Vite grava esses valores dentro do JavaScript no momento do **build**, e não na
-hora de rodar. No Docker eles são build args; veja o `docker-compose.yml`.
+As variáveis `VITE_*` são gravadas dentro do JavaScript no momento do **build**,
+então só pode ir nelas o que for público. Todas as outras são lidas pelas funções
+do servidor na hora de rodar e nunca chegam ao navegador.
 
 ## A única exceção ao "tudo é local"
 
 Transcrição e texto para fala não rodam no navegador com qualidade aceitável,
-então chamam edge functions em `supabase/functions/`, que por sua vez usam a API
-da Groq (Whisper e Orpheus).
+então passam por duas funções pequenas em `api/` — `/api/transcribe` e
+`/api/tts` — que chamam a API da Groq (Whisper e Orpheus). Elas rodam na Vercel,
+no mesmo domínio do site: nenhuma chave nem endereço de terceiro vai para o
+navegador.
 
-**Sem o Supabase configurado, essas duas ferramentas mostram um aviso dizendo que
-estão desligadas. Nada mais é afetado.** Para ligá-las, você precisa de um
-projeto Supabase próprio:
+**Onde essas funções não existem — a imagem Docker, ou um `npm run dev` puro —
+as duas ferramentas mostram um aviso explicando o motivo, e nada mais é
+afetado.** O site pergunta ao `/api/health` antes de mostrá-las.
 
-| Secret | Onde | Para que serve |
-| --- | --- | --- |
-| `GROQ_API_KEY` | Supabase | Acesso à API da Groq |
-| `ALLOWED_ORIGINS` | Supabase | Origens autorizadas a chamar as functions. Vazio desliga a checagem |
-| `TELEGRAM_BOT_TOKEN` | Supabase | Bot do Telegram, opcional |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | Supabase | Chat ids autorizados a usar o bot. Vazio = ninguém |
+Áudios acima de 4 MB são recomprimidos **no seu navegador** antes do envio, para
+Opus mono a 16 kHz, porque a Vercel limita o corpo da requisição a 4,5 MB. Isso
+não custa precisão: o Whisper converte toda entrada para 16 kHz mono antes de
+transcrever.
 
-O banco guarda apenas dados descartáveis: contadores de limite por IP e arquivos
-do Telegram aguardando uma ação, com validade de minutos. Nenhum conteúdo de
-usuário é armazenado.
+O servidor guarda no Redis só dados descartáveis — contadores de limite por IP e
+arquivos do Telegram aguardando uma ação, todos com validade de minutos. Nada do
+que você envia é armazenado, e o bot guarda só o id que o Telegram dá ao
+arquivo, nunca o arquivo.
+
+### Ligando as ferramentas de áudio na sua instalação
+
+1. Publique o repositório na Vercel (ele é reconhecido como projeto Vite; a
+   pasta `api/` entra sozinha).
+2. No projeto, abra **Storage → Create Database → Upstash for Redis** e conecte.
+   As credenciais do Redis são cadastradas no projeto automaticamente.
+3. Em **Settings → Environment Variables**, cadastre `GROQ_API_KEY` (pegue em
+   <https://console.groq.com/keys>; começa com `gsk_`).
+4. Faça um novo deploy. Para testar as funções localmente, use `vercel dev` em
+   vez de `npm run dev`.
+
+O bot do Telegram é opcional: cadastre `TELEGRAM_BOT_TOKEN` e
+`TELEGRAM_ALLOWED_CHAT_IDS`, faça o deploy e aponte o Telegram para ele com
+`npm run telegram set https://<seu-dominio>/api/telegram`. Rode
+`npm run telegram` sem argumentos para ver os outros comandos.
 
 ## As letras miúdas da privacidade
 
@@ -139,7 +158,7 @@ O que isso custou, e o que significa para você:
   de pixel é inofensivo: esse id é público por natureza, impresso no HTML de
   toda página que roda um.
 - **Áudio e voz** enviam áudio e texto para um servidor, como descrito acima.
-  São claramente marcadas e ficam desligadas por padrão.
+  São claramente marcadas, e não existem numa instalação própria.
 
 Todo o resto — cada conversão, cada operação de PDF, cada edição de imagem e
 vídeo — acontece na aba e não toca a rede.
@@ -164,6 +183,8 @@ de segurança — com o código aberto, qualquer um o remove.
 - **ffmpeg.wasm** — áudio e vídeo
 - **fabric** — prancheta de desenho · **TipTap** — editor de texto rico
 - **@imgly/background-removal** — remoção de fundo com modelo local
+- **Vercel Functions** (`api/`) + **Upstash Redis** — ferramentas de áudio e bot
+  do Telegram, o único código que roda em servidor
 
 O motor de PDF → Word fica em `src/lib/pdf-to-docx/`, documentado módulo a
 módulo; `scripts/diagnostico-pdf-docx.mjs` roda esse motor num Chromium de

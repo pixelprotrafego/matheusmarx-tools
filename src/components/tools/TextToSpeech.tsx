@@ -7,6 +7,8 @@ import { Loader2, Volume2, Download } from "lucide-react";
 import { toast } from "sonner";
 import { consume, formatReset } from "@/lib/rate-limit";
 import { downloadBlob } from "@/lib/download";
+import { synthesize, type ApiError } from "@/lib/voice-api";
+import { useVoiceStatus, VoiceUnavailable } from "./shared/VoiceAvailability";
 
 const VOICES = ["austin","leo","dan","mia","zoe","jess","tara","leah"];
 const FORMATS = [
@@ -17,10 +19,6 @@ const FORMATS = [
 ];
 const MAX = 4000;
 
-const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-const FN_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/groq-tts`;
-
 const TextToSpeech = () => {
   const [text, setText] = useState("");
   const [voice, setVoice] = useState("austin");
@@ -28,14 +26,9 @@ const TextToSpeech = () => {
   const [loading, setLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const voz = useVoiceStatus();
 
   const generate = async () => {
-    if (!PROJECT_ID || !ANON_KEY) {
-      toast.error("Geração de voz não configurada", {
-        description: "Faltam VITE_SUPABASE_PROJECT_ID e VITE_SUPABASE_PUBLISHABLE_KEY no build.",
-      });
-      return;
-    }
     const t = text.trim();
     if (!t) { toast.error("Digite um texto"); return; }
     if (t.length > MAX) { toast.error(`Máximo ${MAX} caracteres`); return; }
@@ -46,40 +39,19 @@ const TextToSpeech = () => {
     }
     setLoading(true);
     try {
-      const r = await fetch(FN_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: ANON_KEY,
-          Authorization: `Bearer ${ANON_KEY}`,
-        },
-        body: JSON.stringify({ text: t, voice, format }),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({ error: "Falha" }));
-        const e = new Error(err.error || "Falha ao gerar áudio");
-        (e as Error & { code?: string }).code = err.code;
-        (e as Error & { resetInMs?: number }).resetInMs = err.resetInMs;
-        throw e;
-      }
-      const blob = await r.blob();
+      const blob = await synthesize({ text: t, voice, format });
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       setAudioBlob(blob);
       setAudioUrl(URL.createObjectURL(blob));
       toast.success("Áudio gerado!");
-    } catch (e) {
-      const code = (e as { code?: string })?.code;
-      if (code === "model_terms_required") {
-        toast.error("Geração de voz indisponível no momento", {
-          description: "Tente novamente em instantes.",
-        });
-      } else if (code === "rate_limited") {
-        const ms = (e as { resetInMs?: number })?.resetInMs ?? 0;
-        toast.error("Limite atingido", {
-          description: `Tente novamente em ${formatReset(ms)}.`,
-        });
+    } catch (err) {
+      const e = err as ApiError;
+      if (e.code === "model_terms_required") {
+        toast.error("Geração de voz indisponível no momento", { description: "Tente novamente em instantes." });
+      } else if (e.code === "rate_limited") {
+        toast.error("Limite atingido", { description: `Tente novamente em ${formatReset(e.resetInMs ?? 0)}.` });
       } else {
-        toast.error("Erro", { description: e instanceof Error ? e.message : "desconhecido" });
+        toast.error("Erro", { description: e.message || "desconhecido" });
       }
     } finally {
       setLoading(false);
@@ -126,10 +98,14 @@ const TextToSpeech = () => {
         </div>
       </div>
 
-      <Button onClick={generate} disabled={loading || !text.trim()} className="w-full md:w-auto gap-2">
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Volume2 className="w-4 h-4" />}
-        {loading ? "Gerando..." : "Gerar áudio"}
-      </Button>
+      {voz && "reason" in voz ? (
+        <VoiceUnavailable reason={voz.reason} />
+      ) : (
+        <Button onClick={generate} disabled={loading || !text.trim() || !voz} className="w-full md:w-auto gap-2">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Volume2 className="w-4 h-4" />}
+          {loading ? "Gerando..." : "Gerar áudio"}
+        </Button>
+      )}
 
       {audioUrl && (
         <div className="space-y-3 animate-fade-in">

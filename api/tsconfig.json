@@ -1,0 +1,19 @@
+{
+  // Funções da Vercel, em Node. Fica dentro de api/ de propósito: é o primeiro
+  // tsconfig que a Vercel encontra ao compilar estes arquivos, e assim ela não
+  // herda as opções do app (DOM, JSX, alias "@/") que não valem aqui.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["./**/*.ts"]
+}

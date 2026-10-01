@@ -24,22 +24,25 @@ image or rebuilding.
 - Bypasses of the Content-Security-Policy in `vercel.json` or `docker/nginx.conf`
 - Any path where user file content leaves the browser without being one of the
   documented exceptions
-- Vulnerabilities in the Supabase edge functions under `supabase/functions/`
+- Vulnerabilities in the server functions under `api/` — in particular, any way
+  to bypass the per-IP rate limit, call the Groq API without going through it,
+  or make the Telegram webhook act without a valid secret
 
 ## What is not in scope
 
 - **`src/components/DomainGuard.tsx` being removable.** It pins a build to a set
   of hostnames as a convenience. With the source public it is trivially
   bypassed, and it is not intended as a security control.
-- **The Supabase publishable (anon) key being visible.** That key is designed to
-  be public and is embedded in every frontend build. Access control lives in the
-  edge functions and in row-level security.
+- **Calling `/api/transcribe` or `/api/tts` from a script.** The same-origin
+  check only stops other websites from using the functions through a visitor's
+  browser; a script can send any `Origin` it likes. What protects the service is
+  the per-IP rate limit, so reports belong there.
 - Missing rate limits on a self-hosted install you configured yourself.
 - Reports produced only by an automated scanner, with no demonstrated impact.
 
 ## A note for people self-hosting
 
 The Docker image ships a deliberately strict CSP that allows no third-party
-origins. If you enable the Audio & Voice tools, you must add your Supabase
-domain to `connect-src` in `docker/nginx.conf` — please add only that domain,
-rather than widening the policy.
+origins, and does not include the server functions — the audio tools show a
+notice there instead. Please keep the policy that strict rather than widening
+it.

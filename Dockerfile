@@ -7,8 +7,8 @@
 #   docker build -t matheusmarx-tools .
 #   docker run --rm -p 7767:7767 matheusmarx-tools
 #
-# As ferramentas de Áudio & Voz ficam desligadas nesta imagem por padrão, porque
-# dependem de um Supabase próprio. Para ligá-las, veja o README.
+# As ferramentas de Áudio & Voz não existem nesta imagem: elas dependem das
+# funções em api/, que rodam na Vercel. O site mostra um aviso no lugar delas.
 
 # ------------------------------------------------------------------ construção
 #
@@ -36,16 +36,10 @@ RUN npm ci
 
 COPY . .
 
-# Argumentos de build, todos opcionais. O Vite grava o valor deles dentro do
-# JavaScript gerado, então precisam existir aqui e não na hora de rodar.
-ARG VITE_SUPABASE_URL=""
-ARG VITE_SUPABASE_PUBLISHABLE_KEY=""
-ARG VITE_SUPABASE_PROJECT_ID=""
+# Argumento de build opcional. O Vite grava o valor dentro do JavaScript
+# gerado, então ele precisa existir aqui e não na hora de rodar.
 ARG VITE_ALLOWED_HOSTS=""
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
-    VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY \
-    VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID \
-    VITE_ALLOWED_HOSTS=$VITE_ALLOWED_HOSTS
+ENV VITE_ALLOWED_HOSTS=$VITE_ALLOWED_HOSTS
 
 # O `prebuild` copia o motor do ffmpeg (~31 MB) do node_modules para public/,
 # para o contêiner servir o WebAssembly do próprio domínio em vez de buscá-lo

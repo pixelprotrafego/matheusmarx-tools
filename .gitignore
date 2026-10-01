@@ -20,15 +20,8 @@ dist-ssr
 .env.*
 !.env.example
 
-# Credenciais de administração do banco. Diferente das chaves do .env, que são
-# públicas por natureza, o conteúdo daqui dá acesso total ao Postgres.
-.supabase-db-url
-.supabase-db-url.txt
-*.pgpass
-
-# Arquivos de trabalho do CLI do Supabase
-supabase/.temp/
-supabase/.branches/
+# Configuração local do CLI da Vercel (`vercel link` / `vercel dev`).
+.vercel
 
 # Motor do ffmpeg servido pelo proprio dominio (~31 MB). Nao vai para o Git:
 # `scripts/copy-ffmpeg-core.mjs` recria a pasta a partir do node_modules antes

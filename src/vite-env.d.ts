@@ -7,10 +7,6 @@ interface ImportMetaEnv {
    * Um item iniciado por "." libera o domínio e seus subdomínios.
    */
   readonly VITE_ALLOWED_HOSTS?: string;
-
-  readonly VITE_SUPABASE_URL: string;
-  readonly VITE_SUPABASE_PUBLISHABLE_KEY: string;
-  readonly VITE_SUPABASE_PROJECT_ID: string;
 }
 
 interface ImportMeta {

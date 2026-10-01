@@ -31,24 +31,19 @@ export default tseslint.config(
     },
   },
 
-  // Edge functions — rodam em Deno, não têm as globals do navegador.
+  // Funções da Vercel em api/ — rodam em Node, sem as globals do navegador.
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ["supabase/functions/**/*.ts"],
+    files: ["api/**/*.ts"],
     languageOptions: {
       ecmaVersion: 2022,
-      globals: { ...globals.deno, ...globals.node },
+      globals: globals.node,
     },
     rules: {
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" },
       ],
-      // Estes módulos são importados via especificador "npm:", resolvido pelo
-      // Deno em tempo de execução. O ESLint não enxerga os tipos deles, então
-      // o interop precisa de `any` — os pontos afetados já carregam
-      // deno-lint-ignore. Fica como aviso para não normalizar `any` novo.
-      "@typescript-eslint/no-explicit-any": "warn",
     },
   },
 
