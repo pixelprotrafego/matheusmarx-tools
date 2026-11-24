@@ -22,7 +22,7 @@ background-removal tool and of swapping the video engine for an LGPL build.
 | --- | --- |
 | `react`, `react-dom`, `react-router-dom` | MIT |
 | `@ffmpeg/ffmpeg`, `@ffmpeg/util` | MIT |
-| `pdf-lib`, `jspdf`, `jspdf-autotable` | MIT |
+| `pdf-lib`, `@cantoo/pdf-lib`, `jspdf`, `jspdf-autotable` | MIT |
 | `docx` | MIT |
 | `fabric` | MIT |
 | `html2canvas` | MIT |

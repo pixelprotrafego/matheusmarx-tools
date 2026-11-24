@@ -45,6 +45,7 @@
     "docker:run": "docker run --rm -p 7767:7767 matheusmarx-tools"
   },
   "dependencies": {
+    "@cantoo/pdf-lib": "^2.11.1",
     "@ffmpeg/core": "^0.12.9",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
