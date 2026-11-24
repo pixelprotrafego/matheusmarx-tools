@@ -101,8 +101,13 @@ export interface StructBlock {
 
 /** Imagem desenhada na página, com a caixa que o CTM produziu. */
 export interface PlacedImage extends Rect {
-  /** PNG já codificado, pronto para entrar no DOCX. */
+  /** Imagem já codificada, pronta para entrar no DOCX. */
   data: Uint8Array;
+  /**
+   * PNG para o que tem transparência ou é pequeno (logotipo, ícone, gráfico);
+   * JPEG para foto e página escaneada, que em PNG passariam de 10 MB cada.
+   */
+  format: "png" | "jpg";
   /** Pixels do bitmap original, para o DOCX não reamostrar à toa. */
   pixelWidth: number;
   pixelHeight: number;

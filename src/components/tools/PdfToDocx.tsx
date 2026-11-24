@@ -4,6 +4,9 @@ import { Progress } from "@/components/ui/progress";
 import { Upload, Download, Loader2, X, FileText, AlertTriangle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useAdoptDroppedFile } from "./shared/dropped-file";
+import PdfPasswordPrompt from "./shared/PdfPasswordPrompt";
+import { usePdfPassword } from "./shared/use-pdf-password";
+import { downloadBlob } from "@/lib/download";
 
 const PdfToDocx = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -15,8 +18,10 @@ const PdfToDocx = () => {
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pdfPassword = usePdfPassword();
+  const { catchPassword } = pdfPassword;
 
-  const processFile = useCallback(async (selectedFile: File) => {
+  const processFile = useCallback(async (selectedFile: File, password?: string) => {
     setFile(selectedFile);
     setLoading(true);
     setProgress(2);
@@ -30,6 +35,7 @@ const PdfToDocx = () => {
       const arrayBuffer = await selectedFile.arrayBuffer();
 
       const { blob, pages, pagesWithoutText } = await pdfToDocx(arrayBuffer, {
+        password,
         onProgress: (percent, message) => {
           setProgress(percent);
           setStatus(message);
@@ -37,19 +43,21 @@ const PdfToDocx = () => {
       });
 
       setResultBlob(blob);
-      // Página sem texto é página que veio digitalizada dentro de um PDF que
-      // tem texto no resto. O conteúdo dela não existe como texto em lugar
-      // nenhum do arquivo, então é melhor dizer isso do que deixar quem usa
-      // descobrir sozinho que faltou um pedaço.
+      // Página sem texto é página escaneada: ela vai para o Word como a
+      // imagem da própria página, sem texto editável por trás. É melhor dizer
+      // isso do que deixar quem usa descobrir sozinho ao tentar editar.
       if (pagesWithoutText > 0) {
         setWarning(
-          pagesWithoutText === 1
-            ? "Uma página deste PDF é só imagem, sem texto por trás, e por isso ficou vazia no Word."
-            : `${pagesWithoutText} páginas deste PDF são só imagem, sem texto por trás, e por isso ficaram vazias no Word.`,
+          pagesWithoutText === pages
+            ? "Este PDF é escaneado: as páginas foram para o Word como imagem, iguais ao original, mas o texto delas não é editável."
+            : pagesWithoutText === 1
+              ? "Uma página deste PDF é escaneada: ela foi para o Word como imagem, igual ao original, mas sem texto editável."
+              : `${pagesWithoutText} páginas deste PDF são escaneadas: foram para o Word como imagem, iguais ao original, mas sem texto editável.`,
         );
       }
       toast.success(`Word gerado a partir de ${pages} página${pages > 1 ? "s" : ""}.`);
     } catch (err) {
+      if (catchPassword(err)) return;
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
       setError(msg);
       toast.error("Falha na conversão", { description: msg });
@@ -57,29 +65,32 @@ const PdfToDocx = () => {
       setLoading(false);
       setStatus("");
     }
-  }, []);
+  }, [catchPassword]);
 
-  useAdoptDroppedFile(processFile);
+  const startFile = useCallback((f: File) => {
+    pdfPassword.reset();
+    void processFile(f);
+  }, [processFile, pdfPassword]);
+
+  useAdoptDroppedFile(startFile);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const f = e.dataTransfer.files[0];
-    if (f?.type === "application/pdf") processFile(f);
-  }, [processFile]);
+    if (f?.type === "application/pdf") startFile(f);
+  }, [startFile]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) processFile(f);
+    if (f) startFile(f);
   };
 
   const downloadResult = () => {
     if (!resultBlob || !file) return;
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(resultBlob);
-    link.download = file.name.replace(/\.[^.]+$/, "") + ".docx";
-    link.click();
-    URL.revokeObjectURL(link.href);
+    // file-saver espera o download começar antes de liberar a URL; revogar
+    // logo depois do clique cancela o download em alguns navegadores.
+    downloadBlob(resultBlob, file.name.replace(/\.[^.]+$/, "") + ".docx");
   };
 
   const reset = () => {
@@ -88,6 +99,7 @@ const PdfToDocx = () => {
     setProgress(0);
     setWarning(null);
     setError(null);
+    pdfPassword.reset();
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -120,6 +132,13 @@ const PdfToDocx = () => {
             </Button>
           </div>
 
+          {pdfPassword.request && !loading && (
+            <PdfPasswordPrompt
+              reason={pdfPassword.request}
+              onSubmit={(pw) => { pdfPassword.provide(pw); void processFile(file, pw); }}
+            />
+          )}
+
           {loading && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
@@ -134,7 +153,7 @@ const PdfToDocx = () => {
             <div className="flex items-center gap-3 bg-destructive/10 text-destructive rounded-lg p-4">
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <p className="text-sm flex-1">{error}</p>
-              <Button variant="outline" size="sm" onClick={() => file && processFile(file)} className="gap-1 shrink-0">
+              <Button variant="outline" size="sm" onClick={() => file && processFile(file, pdfPassword.password)} className="gap-1 shrink-0">
                 <RotateCcw className="w-3 h-3" /> Tentar novamente
               </Button>
             </div>

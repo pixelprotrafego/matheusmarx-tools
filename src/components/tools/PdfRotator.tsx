@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { PDFDocument, degrees } from "pdf-lib";
 import { toast } from "sonner";
 import Dropzone from "./shared/Dropzone";
 import FileBadge from "./shared/FileBadge";
 import ConvertButton from "./shared/ConvertButton";
 import ErrorState from "./shared/ErrorState";
+import PdfPasswordPrompt from "./shared/PdfPasswordPrompt";
+import { usePdfPassword } from "./shared/use-pdf-password";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { downloadBlob, replaceExt, bytesToBlob } from "@/lib/download";
+import { keepOpenPassword, loadPdfLib, openPdf } from "@/lib/pdf-unlock";
+import { parsePageSelection } from "@/lib/page-range";
 import { FileText } from "lucide-react";
 
 const PdfRotator = () => {
@@ -17,43 +20,39 @@ const PdfRotator = () => {
   const [range, setRange] = useState("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pdfPassword = usePdfPassword();
 
-  const parseRange = (s: string, total: number): number[] => {
-    if (s === "all" || !s.trim()) return Array.from({ length: total }, (_, i) => i);
-    const out = new Set<number>();
-    for (const part of s.split(",")) {
-      const [a, b] = part.trim().split("-").map(Number);
-      const start = Math.max(1, a);
-      const end = Math.min(total, b ?? a);
-      for (let i = start; i <= end; i++) out.add(i - 1);
-    }
-    return [...out];
+  const chooseFile = (f: File | null) => {
+    setFile(f);
+    setError(null);
+    pdfPassword.reset();
   };
 
-  const go = async () => {
+  const go = async (password = pdfPassword.password) => {
     if (!file) return;
     setLoading(true); setError(null);
     try {
-      const pdf = await PDFDocument.load(await file.arrayBuffer());
-      const pages = pdf.getPages();
-      const indices = parseRange(range, pages.length);
-      for (const i of indices) {
+      const { degrees } = await loadPdfLib();
+      const opened = await openPdf(await file.arrayBuffer(), password);
+      const pages = opened.doc.getPages();
+      for (const i of parsePageSelection(range, pages.length)) {
         const p = pages[i];
-        const current = p.getRotation().angle;
-        p.setRotation(degrees((current + Number(angle)) % 360));
+        p.setRotation(degrees((p.getRotation().angle + Number(angle)) % 360));
       }
-      const bytes = await pdf.save();
+      keepOpenPassword(opened);
+      const bytes = await opened.doc.save();
       downloadBlob(bytesToBlob(bytes, "application/pdf"), replaceExt(file.name, "pdf"));
       toast.success("PDF rotacionado!");
-      setFile(null);
-    } catch (e) { setError(e instanceof Error ? e.message : "Erro"); }
-    finally { setLoading(false); }
+      chooseFile(null);
+    } catch (e) {
+      if (!pdfPassword.catchPassword(e)) setError(e instanceof Error ? e.message : "Erro");
+    } finally { setLoading(false); }
   };
 
   return (
     <div className="space-y-4">
-      {!file ? <Dropzone onFiles={(fs) => setFile(fs[0])} accept="application/pdf,.pdf" title="Arraste o PDF" /> :
-        <FileBadge file={file} icon={<FileText className="w-4 h-4 text-primary" />} onRemove={() => setFile(null)} />}
+      {!file ? <Dropzone onFiles={(fs) => chooseFile(fs[0])} accept="application/pdf,.pdf" title="Arraste o PDF" /> :
+        <FileBadge file={file} icon={<FileText className="w-4 h-4 text-primary" />} onRemove={() => chooseFile(null)} />}
       {file && (
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -73,8 +72,15 @@ const PdfRotator = () => {
           </div>
         </div>
       )}
-      {error && <ErrorState message={error} onRetry={go} />}
-      {file && !error && <ConvertButton onClick={go} loading={loading} label="Rotacionar PDF" />}
+      {pdfPassword.request && (
+        <PdfPasswordPrompt
+          reason={pdfPassword.request}
+          busy={loading}
+          onSubmit={(pw) => { pdfPassword.provide(pw); void go(pw); }}
+        />
+      )}
+      {error && <ErrorState message={error} onRetry={() => go()} />}
+      {file && !error && !pdfPassword.request && <ConvertButton onClick={() => go()} loading={loading} label="Rotacionar PDF" />}
     </div>
   );
 };

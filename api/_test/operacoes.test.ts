@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Jimp } from "jimp";
-import { PDFDocument, StandardFonts } from "pdf-lib";
+import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
@@ -53,13 +53,32 @@ describe("imagens", () => {
 describe("PDF", () => {
   it("interpreta intervalos de página", () => {
     expect(parsePageRange("3-1, 5, 5, 9", 6)).toEqual([0, 1, 2, 4]);
-    expect(() => parsePageRange("abc", 6)).toThrow(/Range inválido/);
+    expect(() => parsePageRange("abc", 6)).toThrow(/Intervalo inválido/);
     expect(() => parsePageRange("10-12", 6)).toThrow(/Nenhuma página/);
   });
 
   it("gira todas as páginas somando à rotação que já existia", async () => {
     const doc = await PDFDocument.load(await rotatePdf(await pdfComTexto(["a", "b"]), 90));
     expect(doc.getPages().map((p) => p.getRotation().angle)).toEqual([90, 90]);
+  });
+
+  it("gira PDF protegido só por senha de proprietário, e o resultado abre sem senha", async () => {
+    // Salvo com object streams, como a maioria dos PDFs modernos: o XRef stream
+    // do original traz o /Encrypt e, se fosse regravado, o resultado sairia
+    // marcado como criptografado e impossível de abrir.
+    const doc = await PDFDocument.load(await pdfComTexto(["extrato"]));
+    doc.encrypt({ ownerPassword: "banco", permissions: { modifying: false } });
+    const protegido = await doc.save({ useObjectStreams: true });
+
+    const girado = await PDFDocument.load(await rotatePdf(protegido, 90));
+    expect(girado.isEncrypted).toBe(false);
+    expect(girado.getPage(0).getRotation().angle).toBe(90);
+  });
+
+  it("PDF com senha de abertura recebe recado claro", async () => {
+    const doc = await PDFDocument.load(await pdfComTexto(["sigiloso"]));
+    doc.encrypt({ userPassword: "abrir", ownerPassword: "dono" });
+    await expect(rotatePdf(await doc.save(), 90)).rejects.toThrow(/pede senha para abrir/);
   });
 
   it("extrai o texto", async () => {

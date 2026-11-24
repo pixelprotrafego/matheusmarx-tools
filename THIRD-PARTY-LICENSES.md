@@ -22,7 +22,7 @@ background-removal tool and of swapping the video engine for an LGPL build.
 | --- | --- |
 | `react`, `react-dom`, `react-router-dom` | MIT |
 | `@ffmpeg/ffmpeg`, `@ffmpeg/util` | MIT |
-| `pdf-lib`, `@cantoo/pdf-lib`, `jspdf`, `jspdf-autotable` | MIT |
+| `@cantoo/pdf-lib`, `@cantoo/fontkit`, `fflate`, `jspdf`, `jspdf-autotable` | MIT |
 | `docx` | MIT |
 | `fabric` | MIT |
 | `html2canvas` | MIT |
@@ -48,7 +48,6 @@ background-removal tool and of swapping the video engine for an LGPL build.
 | `unpdf`, `jimp` (server only) | MIT |
 | `mammoth` (server only) | BSD-2-Clause |
 | `pdfjs-dist` | Apache-2.0 |
-| `docx-preview` | Apache-2.0 |
 | `xlsx` (SheetJS) | Apache-2.0 |
 | `dompurify` | MPL-2.0 OR Apache-2.0 |
 | `imagetracerjs` | Unlicense |
@@ -59,13 +58,23 @@ background-removal tool and of swapping the video engine for an LGPL build.
 | --- | --- |
 | **Sora** (v17) | SIL Open Font License 1.1. Bundled in `public/fonts/`, served from the application's own domain. Licence text: `public/fonts/OFL-Sora.txt`. |
 | **DM Sans** (v17) | SIL Open Font License 1.1. Bundled in `public/fonts/`. Licence text: `public/fonts/OFL-DMSans.txt`. |
+| **Carlito** | SIL Open Font License 1.1, Reserved Font Name "Carlito". Metric-compatible with Calibri. Bundled **unmodified** in `public/fonts/docx/` (files renamed only) for the Word-to-PDF converter. Licence text: `public/fonts/docx/OFL-Carlito.txt`. |
+| **Caladea** | SIL Open Font License 1.1. Metric-compatible with Cambria. Bundled unmodified in `public/fonts/docx/`. Licence text: `public/fonts/docx/OFL-Caladea.txt`. |
+| **Liberation Sans, Serif, Mono** (2.1.5) | SIL Open Font License 1.1, Reserved Font Name "Liberation". Metric-compatible with Arial, Times New Roman and Courier New. Bundled **unmodified** in `public/fonts/docx/`. Licence text: `public/fonts/docx/LICENSE-Liberation.txt`. |
+| **DejaVu Sans** (2.37), symbols subset | Bitstream Vera licence plus public-domain DejaVu changes. Subsetted to the symbol ranges used as a fallback (`dejavu-symbols.ttf`); the licence allows modified copies as long as the name contains neither "Bitstream" nor "Vera" (it keeps "DejaVu Sans"). Licence text: `public/fonts/docx/LICENSE-DejaVu.txt`. |
 | **Groq API** (Whisper, Orpheus) | Third-party service, called only by the server functions in `api/` for the two Audio & Voice tools and the Telegram bot, and only when you configure your own credentials. |
 | **Upstash Redis** | Third-party service holding only short-lived rate-limit counters and bot state, when you configure it. |
 
 The OFL allows bundling and redistributing the fonts, including inside this
 repository and the Docker image, as long as the licence travels with them and
-they are not sold on their own. Both licence files sit next to the `.woff2`
-files and are served alongside them.
+they are not sold on their own. Every licence file sits next to its fonts and
+is served alongside them.
+
+The Word-to-PDF converter serves Carlito and Liberation exactly as published,
+because a modified copy (a subset, for instance) could not keep a Reserved Font
+Name. It embeds a subset of each font in the PDFs it produces, which the OFL
+permits for documents; the vertical-metrics adjustment it applies for layout is
+made on an in-memory copy in the user's browser and is never redistributed.
 
 ## A note on `xlsx`
 

@@ -16,6 +16,7 @@
  *    funciona nos dois casos e evita espaço dobrado.
  */
 
+import { crossesGutter, type Gutter } from "./layout";
 import type { Rgb, TextRun, TextStyle } from "./types";
 
 /** Trecho de texto já dentro de uma linha, com o desvio vertical resolvido. */
@@ -31,6 +32,8 @@ export interface LineRun {
   link?: string;
   underline?: boolean;
   strike?: boolean;
+  /** O trecho é o número elevado que chama a nota de rodapé com este id. */
+  footnote?: number;
 }
 
 export interface TextLine {
@@ -66,14 +69,76 @@ export const sameStyle = (a: TextStyle, b: TextStyle) =>
 const runTop = (r: TextRun) => r.baseline - r.style.size * ASCENT;
 const runBottom = (r: TextRun) => r.baseline + r.style.size * DESCENT;
 
+export interface LineSplitOptions {
+  /** Rios de espaço em branco entre colunas: nenhuma linha os atravessa. */
+  gutters?: Gutter[];
+  /**
+   * Bordas verticais desenhadas (de célula de tabela): nenhuma linha as
+   * atravessa. Sem isso, um total longo encostava na data da coluna vizinha,
+   * os dois trechos se fundiam e caíam inteiros numa célula só.
+   */
+  barriers?: { x: number; top: number; bottom: number }[];
+  /**
+   * Os dois blocos da árvore de estrutura podem ficar na mesma linha? Rótulo e
+   * corpo do mesmo item de lista podem; duas células de tabela, não.
+   */
+  sameLineBlocks?: (a: number, b: number) => boolean;
+}
+
+/**
+ * Parte uma faixa de trechos em linhas independentes onde ela atravessa um rio
+ * entre colunas ou passa de uma célula de tabela para outra. Sem isso, a linha
+ * de uma tabela marcada virava uma linha só, entregue inteira a uma célula, e
+ * as duas colunas de um informativo saíam intercaladas.
+ */
+function splitAcross(group: TextRun[], options: LineSplitOptions): TextRun[][] {
+  const { gutters = [], sameLineBlocks, barriers = [] } = options;
+  if (!gutters.length && !sameLineBlocks && !barriers.length) return [group];
+  const ordered = [...group].sort((a, b) => a.x - b.x);
+  const out: TextRun[][] = [];
+  let current: TextRun[] = [];
+  let reach = -Infinity;
+  let block: number | null = null;
+  for (const run of ordered) {
+    const solid = run.text.trim().length > 0;
+    if (current.length && solid) {
+      const top = run.baseline - run.style.size * ASCENT;
+      const bottom = run.baseline + run.style.size * DESCENT;
+      const crosses =
+        (gutters.length > 0 && crossesGutter(gutters, reach, run.x, top, bottom)) ||
+        barriers.some((b) => b.x > reach - 0.5 && b.x < run.x + 0.5 && b.top < bottom && b.bottom > top);
+      const otherBlock =
+        sameLineBlocks !== undefined &&
+        block !== null &&
+        run.structBlock !== null &&
+        run.structBlock !== block &&
+        !sameLineBlocks(block, run.structBlock);
+      if (crosses || otherBlock) {
+        out.push(current);
+        current = [];
+        reach = -Infinity;
+        block = null;
+      }
+    }
+    current.push(run);
+    if (solid) {
+      reach = Math.max(reach, run.x + run.width);
+      if (run.structBlock !== null) block = run.structBlock;
+    }
+  }
+  if (current.length) out.push(current);
+  return out;
+}
+
 /**
  * Agrupa os trechos em linhas.
  *
  * Só entram na mesma linha os trechos cujas caixas se sobrepõem na vertical em
  * mais da metade da menor delas. É a mesma regra que o olho usa e ela aguenta
- * corpo misturado, expoente e nota de rodapé sem regra especial.
+ * corpo misturado, expoente e nota de rodapé sem regra especial. Depois, a
+ * faixa é partida onde cruza um rio entre colunas ou uma divisa de célula.
  */
-export function groupIntoLines(runs: TextRun[]): TextLine[] {
+export function groupIntoLines(runs: TextRun[], options: LineSplitOptions = {}): TextLine[] {
   const usable = runs.filter((r) => r.text.length > 0 && r.style.size > 0);
   if (!usable.length) return [];
 
@@ -109,7 +174,10 @@ export function groupIntoLines(runs: TextRun[]): TextLine[] {
   }
   if (current.length) groups.push(current);
 
-  return groups.map(buildLine).filter((line): line is TextLine => line !== null);
+  return groups
+    .flatMap((group) => splitAcross(group, options))
+    .map(buildLine)
+    .filter((line): line is TextLine => line !== null);
 }
 
 /** Valor mais frequente, com desempate pelo peso acumulado. */
@@ -186,10 +254,18 @@ function buildLine(group: TextRun[]): TextLine | null {
     // palavra seguinte que sai o recuo pendente do item no Word. Quando a bala
     // vem na mesma fonte do texto — e não em Symbol, como o Word costuma
     // gravar — a fusão por estilo apagaria essa distância.
+    // Vale também para número ("1.", "a)", "iv."): é da distância entre ele e
+    // o texto que sai o recuo do item numerado.
     const markerLike =
-      runsOut.length === 1 && last?.text.trim().length === 1 && !/[\p{L}\p{N}]/u.test(last.text.trim());
+      runsOut.length === 1 &&
+      last !== undefined &&
+      ((last.text.trim().length === 1 && !/[\p{L}\p{N}]/u.test(last.text.trim())) ||
+        /^(\d{1,3}|[a-zA-Z]|[ivxlcdmIVXLCDM]{1,5})[.)]$/.test(last.text.trim()));
+    // Trechos de blocos diferentes da árvore de estrutura (o rótulo de um item
+    // de lista e o corpo dele) não se fundem: o rótulo é o marcador.
+    const sameBlock = !last || last.structBlock === run.structBlock;
 
-    if (last && continuous && !markerLike && last.vertical === vertical && sameStyle(last.style, run.style)) {
+    if (last && continuous && !markerLike && sameBlock && last.vertical === vertical && sameStyle(last.style, run.style)) {
       last.text += text;
       last.width = run.x + run.width - last.x;
     } else {

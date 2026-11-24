@@ -45,6 +45,7 @@
     "docker:run": "docker run --rm -p 7767:7767 matheusmarx-tools"
   },
   "dependencies": {
+    "@cantoo/fontkit": "^2.0.12",
     "@cantoo/pdf-lib": "^2.11.1",
     "@ffmpeg/core": "^0.12.9",
     "@ffmpeg/ffmpeg": "^0.12.15",
@@ -93,9 +94,9 @@
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "docx": "^9.6.1",
-    "docx-preview": "^0.3.7",
     "dompurify": "^3.3.2",
     "fabric": "^7.4.0",
+    "fflate": "^0.8.3",
     "file-saver": "^2.0.5",
     "heic2any": "^0.0.4",
     "html2canvas": "^1.4.1",
@@ -108,7 +109,6 @@
     "lucide-react": "^0.462.0",
     "mammoth": "^1.13.0",
     "next-themes": "^0.3.0",
-    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "4.10.38",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",

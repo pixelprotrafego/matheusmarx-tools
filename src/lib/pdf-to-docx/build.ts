@@ -18,8 +18,9 @@ import type {
 
 import type { Paragraph as ParagraphPlan } from "./blocks";
 import type { LineRun, TextLine } from "./lines";
-import type { RunningContent, SectionPlan } from "./sections";
-import type { DocTable } from "./tables";
+import type { PageGroup, RunningContent, SectionPlan } from "./sections";
+import type { CellImage, DocTable } from "./tables";
+import type { Footnote } from "./footnotes";
 import type { PlacedImage, Rgb } from "./types";
 
 /** Um item do corpo do documento, na ordem de leitura. */
@@ -27,14 +28,25 @@ export type BodyItem =
   | { kind: "paragraph"; paragraph: ParagraphPlan }
   | { kind: "table"; table: DocTable }
   | { kind: "image"; image: PlacedImage; alignment: "left" | "center" | "right"; spaceAfter: number }
+  /** Imagem de página escaneada, na posição exata da página. */
+  | { kind: "page-image"; image: PlacedImage }
   | { kind: "page-break" };
 
-export interface DocumentPlan {
-  section: SectionPlan;
+/** Uma seção do Word: páginas do mesmo tamanho e o corpo delas. */
+export interface DocumentPart {
+  group: PageGroup;
   body: BodyItem[];
   /** Caixa de conteúdo da página, em pontos, para medir recuos. */
   contentLeft: number;
   contentRight: number;
+}
+
+export interface DocumentPlan {
+  /** Cabeçalho, rodapé e "primeira página diferente", do documento inteiro. */
+  section: SectionPlan;
+  parts: DocumentPart[];
+  /** Notas de rodapé reconhecidas, chamadas no texto pelo id. */
+  footnotes: Footnote[];
 }
 
 // ---------------------------------------------------------------- unidades
@@ -91,7 +103,18 @@ const buildRun = (docx: DocxModule, run: LineRun, forceColor?: string) => {
  * palavra ("terça-feira" partida na quebra) ou da hifenização automática, em
  * nenhum dos dois casos entra espaço ali.
  */
-const runsOfLines = (docx: DocxModule, lines: TextLine[]): ParagraphChild[] => {
+/** Paradas de tabulação coletadas ao montar um parágrafo. */
+type TabStops = Map<number, "left" | "right">;
+
+const runsOfLines = (
+  docx: DocxModule,
+  lines: TextLine[],
+  /**
+   * Caixa do parágrafo, para trocar vão largo por tabulação. Sem ela (nota
+   * de rodapé, cabeçalho), o vão continua sendo um espaço.
+   */
+  tabs?: { left: number; right: number; stops: TabStops },
+): ParagraphChild[] => {
   const { ExternalHyperlink } = docx;
   const children: ParagraphChild[] = [];
   let previousText = "";
@@ -99,8 +122,40 @@ const runsOfLines = (docx: DocxModule, lines: TextLine[]): ParagraphChild[] => {
   lines.forEach((line, index) => {
     let pendingSpace = index > 0 && !/[-‐­\s]$/.test(previousText);
 
-    for (const run of line.runs) {
-      if (!run.text) continue;
+    line.runs.forEach((run, k) => {
+      if (!run.text) return;
+      // A chamada de nota vira a referência de nota do próprio Word, que
+      // numera sozinha e leva à nota no pé da página.
+      if (run.footnote !== undefined) {
+        children.push(new docx.FootnoteReferenceRun(run.footnote));
+        previousText = run.text;
+        return;
+      }
+
+      // Vão largo dentro da linha ("Data: ___      Assinatura: ___", a data
+      // à direita no cabeçalho de um currículo) era um espaço só, e o que
+      // vinha depois encostava no que vinha antes. Vira tabulação com parada
+      // na posição exata — à direita quando o trecho termina na margem.
+      const before = line.runs[k - 1];
+      if (tabs && before && run.text.trim()) {
+        const gap = run.x - (before.x + before.width);
+        if (gap > Math.max(18, line.fontSize * 1.8)) {
+          const last = line.runs.slice(k + 1).every((r) => !r.text.trim());
+          const atRight = last && tabs.right - (run.x + run.width) < 3;
+          const position = Math.round(((atRight ? tabs.right : run.x) - tabs.left) * 20);
+          if (position > 0) {
+            tabs.stops.set(position, atRight ? "right" : "left");
+            children.push(new docx.TextRun({ children: [new docx.Tab()], size: halfPoint(run.style.size) }));
+            const text = run.text.replace(/^\s+/, "");
+            const built = buildRun(docx, { ...run, text });
+            children.push(run.link ? new ExternalHyperlink({ children: [built], link: run.link }) : built);
+            previousText = text;
+            pendingSpace = false;
+            return;
+          }
+        }
+      }
+
       const needsSpace = pendingSpace && !/^\s/.test(run.text);
       pendingSpace = false;
 
@@ -121,7 +176,7 @@ const runsOfLines = (docx: DocxModule, lines: TextLine[]): ParagraphChild[] => {
         run.link ? new ExternalHyperlink({ children: [built], link: run.link }) : built,
       );
       previousText = text;
-    }
+    });
   });
 
   return children;
@@ -224,17 +279,43 @@ const alignmentOf = (docx: DocxModule, value: ParagraphPlan["alignment"]) => {
  * de verdade se reconhece por várias linhas parando no mesmo ponto, bem antes
  * da margem.
  */
+/**
+ * Recuo à direita que as próprias quebras de linha exigem.
+ *
+ * Num parágrafo alinhado à esquerda, a linha termina antes da margem só porque
+ * a palavra seguinte não coube — isso não é recuo. Recuo existe quando a
+ * primeira palavra da linha seguinte *caberia* na linha de cima sem ele: aí a
+ * margem efetiva do parágrafo é menor. Antes, qualquer folga acima de 12 pt
+ * num parágrafo de duas linhas virava recuo, e o Word quebrava a primeira
+ * linha uma palavra antes do original.
+ */
+const wrapIndentRight = (plan: ParagraphPlan): number => {
+  if (plan.lines.length < 2) return 0;
+  let limit = Infinity;
+  for (let i = 0; i + 1 < plan.lines.length; i++) {
+    const line = plan.lines[i];
+    const first = plan.lines[i + 1].runs.find((r) => r.text.trim());
+    if (!first) continue;
+    const word = first.text.trim().split(/\s+/)[0];
+    const perChar = first.width / Math.max(1, first.text.trimEnd().length);
+    limit = Math.min(limit, line.right + line.fontSize * 0.25 + perChar * word.length);
+  }
+  if (!Number.isFinite(limit)) return 0;
+  const needed = plan.boxRight - limit + 1;
+  // Prova contraditória (a palavra não caberia nem na linha mais comprida):
+  // é diferença de métrica, não recuo.
+  return needed > 0 && needed <= plan.indentRight ? needed : 0;
+};
+
 const indentsFor = (plan: ParagraphPlan) => {
   if (plan.alignment === "center") return { left: 0, right: 0 };
 
-  const rightIsReal =
-    plan.alignment === "justify" ||
-    plan.alignment === "right" ||
-    (plan.lines.length > 1 && plan.indentRight > 12);
+  const rightIsReal = plan.alignment === "justify" || plan.alignment === "right";
+  const right = rightIsReal ? plan.indentRight : wrapIndentRight(plan);
 
   const base = {
     left: twip(plan.alignment === "right" ? 0 : plan.indentLeft),
-    right: twip(rightIsReal ? plan.indentRight : 0),
+    right: twip(right),
   };
 
   if (plan.alignment === "right") return base;
@@ -269,6 +350,8 @@ const paragraphOptions = (
     indent: numbering ? undefined : indentsFor(plan),
     numbering: numbering ?? undefined,
     outlineLevel: plan.outlineLevel > 0 ? plan.outlineLevel - 1 : undefined,
+    // Fundo do parágrafo: a faixa colorida que o PDF desenhou atrás dele.
+    shading: plan.shading ? { type: docx.ShadingType.CLEAR, fill: hex(plan.shading), color: "auto" } : undefined,
   };
 };
 
@@ -276,7 +359,7 @@ const paragraphOptions = (
 
 const imageRun = (docx: DocxModule, image: PlacedImage) =>
   new docx.ImageRun({
-    type: "png",
+    type: image.format,
     data: image.data,
     transformation: { width: pixels(image.width), height: pixels(image.height) },
   });
@@ -292,15 +375,15 @@ const imageRun = (docx: DocxModule, image: PlacedImage) =>
  * que é opaco e cobre a folha inteira — apaga a faixa colorida do cabeçalho
  * desenhada depois dele.
  */
-const floatingImageRun = (docx: DocxModule, image: PlacedImage) =>
+const floatingImageRun = (docx: DocxModule, image: PlacedImage, behind = true) =>
   new docx.ImageRun({
-    type: "png",
+    type: image.format,
     data: image.data,
     transformation: { width: pixels(image.width), height: pixels(image.height) },
     floating: {
       horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: emu(image.x) },
       verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: emu(image.y) },
-      behindDocument: true,
+      behindDocument: behind,
       allowOverlap: true,
       zIndex: image.order + 1,
       wrap: { type: docx.TextWrappingType.NONE },
@@ -314,28 +397,112 @@ const borderSide = (docx: DocxModule, on: boolean, color: Rgb, thickness: number
     ? { style: docx.BorderStyle.SINGLE, size: Math.max(2, Math.round(thickness * 8)), color: hex(color) }
     : { style: docx.BorderStyle.NONE, size: 0, color: "auto" };
 
+/**
+ * Parágrafos e imagens de uma célula, na ordem vertical, com o espaço entre
+ * eles medido de verdade.
+ *
+ * O "espaço depois" de um parágrafo foi medido até o parágrafo seguinte. Com
+ * uma imagem no meio, esse vão já inclui a altura da imagem — e somar a imagem
+ * por cima abria um buraco do tamanho dela duas vezes.
+ */
+const cellChildren = (
+  docx: DocxModule,
+  cell: DocTable["rows"][number]["cells"][number],
+  renderParagraph: (plan: ParagraphPlan) => DocxParagraph,
+) => {
+  const { Paragraph, AlignmentType } = docx;
+  type Entry =
+    | { top: number; bottom: number; paragraph: ParagraphPlan }
+    | { top: number; bottom: number; image: CellImage };
+  const entries: Entry[] = [
+    ...cell.paragraphs.map((paragraph) => ({ top: paragraph.top, bottom: paragraph.bottom, paragraph })),
+    ...cell.images.map((image) => ({ top: image.image.y, bottom: image.image.y + image.image.height, image })),
+  ].sort((a, b) => a.top - b.top);
+
+  return entries.map((entry, i) => {
+    const next = entries[i + 1];
+    const gap = next ? Math.max(0, Math.round((next.top - entry.bottom) * 10) / 10) : 0;
+    if ("paragraph" in entry) {
+      if (next && "image" in next) entry.paragraph.spaceAfter = gap;
+      return renderParagraph(entry.paragraph);
+    }
+    return new Paragraph({
+      alignment:
+        entry.image.alignment === "center" ? AlignmentType.CENTER
+        : entry.image.alignment === "right" ? AlignmentType.RIGHT
+        : AlignmentType.LEFT,
+      spacing: { before: 0, after: twip(gap) },
+      children: [imageRun(docx, entry.image.image)],
+    });
+  });
+};
+
+/**
+ * Tabela: as de dados, as de layout (currículo) e as áreas com colunas.
+ *
+ * A largura das colunas, as mesclas, a altura mínima das linhas e as margens
+ * internas saem medidas do PDF; o recuo da tabela a faz começar onde ela
+ * começava, mesmo fora da margem da página — a barra lateral de um currículo
+ * costuma começar antes da margem do texto.
+ */
 const buildTable = (
   docx: DocxModule,
   table: DocTable,
+  contentLeft: number,
   renderParagraph: (plan: ParagraphPlan) => DocxParagraph,
+  /** Altura útil da página: nenhuma linha pode pedir mais do que isso. */
+  maxRowHeight = Infinity,
 ) => {
-  const { Table, TableRow, TableCell, WidthType, Paragraph } = docx;
+  const { Table, TableRow, TableCell, WidthType, Paragraph, HeightRule } = docx;
+  // "Repetir como linha de cabeçalho" só faz sentido com corpo depois dela.
+  // Numa tabela de uma linha só marcada como cabeçalho (o currículo em tabela),
+  // a linha que transbordava para a página seguinte era repetida lá inteira.
+  let headerRows = 0;
+  while (headerRows < table.rows.length && table.rows[headerRows].cells.some((c) => c.header)) headerRows++;
+  const repeatHeader = headerRows > 0 && headerRows < table.rows.length;
+  const starts: number[] = [table.left];
+  for (const w of table.columnWidths) starts.push(starts[starts.length - 1] + w);
+  const columnAt = (x: number) => {
+    let best = 0;
+    for (let i = 0; i < starts.length - 1; i++) if (Math.abs(starts[i] - x) < Math.abs(starts[best] - x)) best = i;
+    return best;
+  };
+  const none = { style: docx.BorderStyle.NONE, size: 0, color: "auto" };
 
   return new Table({
     width: { size: twip(table.right - table.left), type: WidthType.DXA },
     columnWidths: table.columnWidths.map(twip),
     layout: docx.TableLayoutType.FIXED,
+    indent: Math.abs(table.left - contentLeft) > 1 ? { size: twip(table.left - contentLeft), type: WidthType.DXA } : undefined,
+    borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
     rows: table.rows.map(
-      (row) =>
+      (row, r) =>
         new TableRow({
-          tableHeader: row.cells.some((c) => c.header) || undefined,
-          children: row.cells.map((cell, index) => {
-            const children = cell.paragraphs.map(renderParagraph);
+          tableHeader: (repeatHeader && r < headerRows) || undefined,
+          // Um ponto de folga: a altura medida no PDF, somada às margens que o
+          // Word acrescenta, empurrava a linha para a página seguinte.
+          height: row.height ? { value: twip(Math.min(row.height, maxRowHeight) - 1), rule: HeightRule.ATLEAST } : undefined,
+          children: row.cells.map((cell) => {
+            const start = columnAt(cell.left);
+            const span = Math.max(1, cell.span);
+            const width = table.columnWidths.slice(start, start + span).reduce((a, b) => a + b, 0);
+            const children = cellChildren(docx, cell, renderParagraph);
             return new TableCell({
-              width: { size: twip(table.columnWidths[index] ?? table.columnWidths[0] ?? 60), type: WidthType.DXA },
+              width: { size: twip(width || cell.right - cell.left), type: WidthType.DXA },
+              columnSpan: span > 1 ? span : undefined,
+              rowSpan: cell.rowSpan > 1 ? cell.rowSpan : undefined,
+              margins: {
+                left: twip(cell.padding.left),
+                right: twip(cell.padding.right),
+                // Menos de 3 pt é ruído da estimativa do topo do texto: o Word
+                // usa margem zero, e somar esse ruído em cada linha de uma
+                // tabela longa empurrava as últimas linhas para outra página.
+                top: cell.padding.top >= 3 ? twip(Math.min(cell.padding.top, 12)) : 0,
+                bottom: 0,
+              },
               // Uma célula vazia sem parágrafo nenhum deixa o arquivo inválido.
               children: children.length ? children : [new Paragraph({})],
-              shading: cell.shading ? { fill: hex(cell.shading) } : undefined,
+              shading: cell.shading ? { fill: hex(cell.shading), type: docx.ShadingType.CLEAR, color: "auto" } : undefined,
               borders: {
                 top: borderSide(docx, cell.borders.top, cell.borders.color, cell.borders.thickness),
                 bottom: borderSide(docx, cell.borders.bottom, cell.borders.color, cell.borders.thickness),
@@ -428,7 +595,8 @@ const buildRunningContent = (
 /** Monta o documento inteiro e devolve o .docx pronto. */
 export async function buildDocx(docx: DocxModule, plan: DocumentPlan): Promise<Blob> {
   const { Document, Packer, Paragraph, PageBreak, AlignmentType } = docx;
-  const box = { left: plan.contentLeft, right: plan.contentRight };
+  const firstPart = plan.parts[0];
+  const box = { left: firstPart?.contentLeft ?? 72, right: firstPart?.contentRight ?? 523 };
 
   // Cada sequência de itens de lista vira uma numeração própria, para o Word
   // recomeçar a contagem onde o documento original recomeçava.
@@ -444,44 +612,74 @@ export async function buildDocx(docx: DocxModule, plan: DocumentPlan): Promise<B
       group = [];
     };
 
-    for (const entry of plan.body) {
+    const visit = (entry: BodyItem) => {
       if (entry.kind !== "paragraph" || !entry.paragraph.list) {
         // Só um item de lista logo em seguida continua a mesma lista.
-        if (entry.kind !== "paragraph") flush();
-        else if (!entry.paragraph.list) flush();
-        continue;
+        flush();
+        return;
       }
       const p = entry.paragraph;
+      const list = p.list!;
       group.push({
         paragraph: p,
         item: {
-          level: p.list.level,
-          kind: p.list.kind,
-          marker: p.list.marker,
-          font: p.list.markerFont,
+          level: list.level,
+          kind: list.kind,
+          marker: list.marker,
+          font: list.markerFont,
           indentLeft: p.indentLeft,
           // O recuo pendente é a distância do marcador até o texto, medida no
           // próprio PDF; um valor fixo aproximaria ou afastaria o marcador.
-          hanging: Math.max(p.indentLeft - p.list.markerIndent, 6),
+          hanging: Math.max(p.indentLeft - list.markerIndent, 6),
         },
       });
+    };
+
+    for (const part of plan.parts) {
+      for (const entry of part.body) {
+        if (entry.kind === "table") {
+          // Cada célula tem as próprias listas, que não continuam na vizinha.
+          flush();
+          for (const row of entry.table.rows) {
+            for (const cell of row.cells) {
+              for (const paragraph of cell.paragraphs) visit({ kind: "paragraph", paragraph });
+              flush();
+            }
+          }
+          continue;
+        }
+        visit(entry);
+      }
+      flush();
     }
-    flush();
   }
 
-  const renderParagraph = (item: ParagraphPlan, pageBreakBefore = false) =>
-    new Paragraph({
-      ...paragraphOptions(docx, item, listReference.get(item) ?? null, pageBreakBefore),
-      children: runsOfLines(docx, item.lines),
+  const renderParagraph = (item: ParagraphPlan, pageBreakBefore = false) => {
+    const numbering = listReference.get(item) ?? null;
+    // Item de lista já tem o vão do marcador dado pela numeração.
+    const tabs = numbering ? undefined : { left: item.boxLeft, right: item.boxRight, stops: new Map() as TabStops };
+    const children = runsOfLines(docx, item.lines, tabs);
+    const tabStops = tabs && tabs.stops.size
+      ? [...tabs.stops].map(([position, type]) => ({
+          type: type === "right" ? docx.TabStopType.RIGHT : docx.TabStopType.LEFT,
+          position,
+        }))
+      : undefined;
+    return new Paragraph({
+      ...paragraphOptions(docx, item, numbering, pageBreakBefore),
+      tabStops,
+      children,
     });
+  };
 
+  const renderBody = (part: DocumentPart, last: boolean) => {
   const children: (DocxParagraph | DocxTable)[] = [];
   // A quebra de página vira propriedade do parágrafo seguinte, e não um
   // parágrafo vazio só para carregar a quebra: o parágrafo vazio aparece como
   // uma linha em branco no topo da página nova, que não existe no original.
   let breakPending = false;
 
-  for (const entry of plan.body) {
+  for (const entry of part.body) {
     switch (entry.kind) {
       case "paragraph":
         children.push(renderParagraph(entry.paragraph, breakPending));
@@ -494,9 +692,19 @@ export async function buildDocx(docx: DocxModule, plan: DocumentPlan): Promise<B
           children.push(new Paragraph({ children: [new PageBreak()], spacing: { after: 0, before: 0 } }));
           breakPending = false;
         }
-        children.push(buildTable(docx, entry.table, (p) => renderParagraph(p)));
-        // O Word exige um parágrafo entre duas tabelas e depois da última.
-        children.push(new Paragraph({ spacing: { after: 0, before: 0 } }));
+        children.push(
+          buildTable(
+            docx,
+            entry.table,
+            part.contentLeft,
+            (p) => renderParagraph(p),
+            part.group.pageHeight - part.group.margins.top - part.group.margins.bottom - 4,
+          ),
+        );
+        // O Word exige um parágrafo entre duas tabelas e depois da última. Um
+        // parágrafo vazio comum tem a altura de uma linha inteira e, depois de
+        // uma tabela que vai até o pé da página, criava uma página em branco.
+        children.push(new Paragraph({ spacing: { after: 0, before: 0, line: 20, lineRule: docx.LineRuleType.EXACT } }));
         break;
       case "image":
         children.push(
@@ -512,18 +720,43 @@ export async function buildDocx(docx: DocxModule, plan: DocumentPlan): Promise<B
         );
         breakPending = false;
         break;
+      case "page-image":
+        // Ancorada à página, na frente: numa página escaneada não há texto
+        // para ela cobrir, e "atrás do texto" a esconderia atrás do papel.
+        children.push(
+          new Paragraph({
+            pageBreakBefore: breakPending || undefined,
+            spacing: { after: 0, before: 0, line: 20, lineRule: docx.LineRuleType.EXACT },
+            children: [floatingImageRun(docx, entry.image, false)],
+          }),
+        );
+        breakPending = false;
+        break;
       case "page-break":
         breakPending = true;
         break;
     }
   }
 
-  if (breakPending) {
+  // Páginas vazias no fim do documento não viram quebra: a página em branco
+  // depois de um currículo que ocupa a folha inteira é só o parágrafo que o
+  // Word põe depois de toda tabela, e ele a recria sozinho se for preciso.
+  if (breakPending && !last) {
     children.push(new Paragraph({ children: [new PageBreak()], spacing: { after: 0, before: 0 } }));
   }
+  return children;
+  };
 
   const { section } = plan;
   const document = new Document({
+    footnotes: plan.footnotes.length
+      ? Object.fromEntries(
+          plan.footnotes.map((note) => [
+            note.id,
+            { children: [new Paragraph({ spacing: { after: 0 }, children: runsOfLines(docx, note.lines) })] },
+          ]),
+        )
+      : undefined,
     numbering: numberings.length ? { config: numberings.map((n) => ({ reference: n.reference, levels: n.levels })) } : undefined,
     styles: {
       default: {
@@ -533,37 +766,48 @@ export async function buildDocx(docx: DocxModule, plan: DocumentPlan): Promise<B
         },
       },
     },
-    sections: [
-      {
+    sections: plan.parts.map((part, index) => {
+      const { group } = part;
+      const first = index === 0;
+      return {
         properties: {
           page: {
+            // A biblioteca troca largura e altura quando a orientação é
+            // paisagem. Passar a largura maior junto com "paisagem" devolvia
+            // uma página em pé com o rótulo de deitada, e o texto se espremia.
             size: {
-              width: twip(section.pageWidth),
-              height: twip(section.pageHeight),
-              orientation: section.landscape ? docx.PageOrientation.LANDSCAPE : docx.PageOrientation.PORTRAIT,
+              width: twip(Math.min(group.pageWidth, group.pageHeight)),
+              height: twip(Math.max(group.pageWidth, group.pageHeight)),
+              orientation: group.landscape ? docx.PageOrientation.LANDSCAPE : docx.PageOrientation.PORTRAIT,
             },
             margin: {
-              top: twip(section.margins.top),
-              right: twip(section.margins.right),
-              bottom: twip(section.margins.bottom),
-              left: twip(section.margins.left),
-              header: twip(section.margins.header),
-              footer: twip(section.margins.footer),
+              top: twip(group.margins.top),
+              right: twip(group.margins.right),
+              bottom: twip(group.margins.bottom),
+              left: twip(group.margins.left),
+              header: twip(group.margins.header),
+              footer: twip(group.margins.footer),
             },
           },
-          titlePage: section.differentFirstPage || undefined,
+          titlePage: (first && section.differentFirstPage) || undefined,
         },
-        headers: {
-          ...(section.defaultHeader ? { default: buildRunningContent(docx, section.defaultHeader, box, "header") } : {}),
-          ...(section.firstPageHeader ? { first: buildRunningContent(docx, section.firstPageHeader, box, "header") } : {}),
-        },
-        footers: {
-          ...(section.defaultFooter ? { default: buildRunningContent(docx, section.defaultFooter, box, "footer") } : {}),
-          ...(section.firstPageFooter ? { first: buildRunningContent(docx, section.firstPageFooter, box, "footer") } : {}),
-        },
-        children,
-      },
-    ],
+        // Só a primeira seção declara cabeçalho e rodapé; as seguintes herdam
+        // do jeito que o Word faz ("vincular ao anterior").
+        ...(first
+          ? {
+              headers: {
+                ...(section.defaultHeader ? { default: buildRunningContent(docx, section.defaultHeader, box, "header") } : {}),
+                ...(section.firstPageHeader ? { first: buildRunningContent(docx, section.firstPageHeader, box, "header") } : {}),
+              },
+              footers: {
+                ...(section.defaultFooter ? { default: buildRunningContent(docx, section.defaultFooter, box, "footer") } : {}),
+                ...(section.firstPageFooter ? { first: buildRunningContent(docx, section.firstPageFooter, box, "footer") } : {}),
+              },
+            }
+          : {}),
+        children: renderBody(part, index === plan.parts.length - 1),
+      };
+    }),
   });
 
   return Packer.toBlob(document);

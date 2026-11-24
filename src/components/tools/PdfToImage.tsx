@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -10,10 +10,17 @@ import { toast } from "sonner";
 import { formatReset } from "@/lib/rate-limit";
 import { guard, guardMessage } from "@/lib/abuse-guard";
 import { useAdoptDroppedFile } from "./shared/dropped-file";
+import PdfPasswordPrompt from "./shared/PdfPasswordPrompt";
+import { usePdfPassword } from "./shared/use-pdf-password";
+import { openPdfjs } from "@/lib/pdf-unlock";
 
 interface PageImage {
-  dataUrl: string;
+  /** URL de objeto do Blob, para a miniatura e o download. */
+  url: string;
+  blob: Blob;
   pageNumber: number;
+  /** Extensão do arquivo como ele foi gerado, e não a da opção marcada agora. */
+  ext: "png" | "jpg";
 }
 
 /** O PDF mede em pontos: 72 pt por polegada é a escala 1:1 do documento. */
@@ -36,8 +43,26 @@ const PdfToImage = () => {
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pdfPassword = usePdfPassword();
+  const { catchPassword } = pdfPassword;
 
-  const processFile = useCallback(async (selectedFile: File) => {
+  // Imagens de página em alta resolução pesam dezenas de MB cada; a URL de
+  // objeto antiga é liberada sempre que a lista é trocada.
+  const replacePages = useCallback((next: PageImage[]) => {
+    setPages((previous) => {
+      for (const page of previous) URL.revokeObjectURL(page.url);
+      return next;
+    });
+  }, []);
+
+  // Ao sair da ferramenta, as imagens que ainda estão na tela são liberadas.
+  const pagesRef = useRef<PageImage[]>([]);
+  pagesRef.current = pages;
+  useEffect(() => () => {
+    for (const page of pagesRef.current) URL.revokeObjectURL(page.url);
+  }, []);
+
+  const processFile = useCallback(async (selectedFile: File, password?: string) => {
     const rl = guard("pdf-to-image", { hourly: 15, daily: 50 });
     if (!rl.ok) {
       toast.error(guardMessage(rl), rl.reason === "bot" ? undefined : { description: `Tente novamente em ${formatReset(rl.resetInMs)}.` });
@@ -45,46 +70,61 @@ const PdfToImage = () => {
     }
     setLoading(true);
     setProgress(0);
-    setPages([]);
+    replacePages([]);
     setError(null);
 
     try {
       const { pdfjsLib } = await import("@/lib/pdfjs-setup");
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pdf = await openPdfjs(await selectedFile.arrayBuffer(), password);
       const totalPages = pdf.numPages;
       const renderedPages: PageImage[] = [];
+      const mimeType = format === "jpeg" ? "image/jpeg" : "image/png";
+      const ext = format === "jpeg" ? "jpg" : "png";
 
       for (let i = 1; i <= totalPages; i++) {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: dpi / PDF_BASE_DPI });
         const canvas = document.createElement("canvas");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
         const ctx = canvas.getContext("2d")!;
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        // Com os valores dos campos de formulário desenhados, como um leitor
+        // de PDF mostra a página — e não com os campos em branco.
+        await page.render({
+          canvasContext: ctx,
+          viewport,
+          annotationMode: pdfjsLib.AnnotationMode.ENABLE_STORAGE,
+        }).promise;
 
-        const mimeType = format === "jpeg" ? "image/jpeg" : "image/png";
-        const dataUrl = canvas.toDataURL(mimeType, quality[0] / 100);
-        renderedPages.push({ dataUrl, pageNumber: i });
+        const blob = await new Promise<Blob>((res, rej) =>
+          canvas.toBlob(
+            (b) => (b ? res(b) : rej(new Error(`Não foi possível gerar a imagem da página ${i}.`))),
+            mimeType,
+            quality[0] / 100,
+          ));
+        canvas.width = 0;
+        canvas.height = 0;
+        renderedPages.push({ url: URL.createObjectURL(blob), blob, pageNumber: i, ext });
         setProgress(Math.round((i / totalPages) * 100));
       }
 
-      setPages(renderedPages);
+      replacePages(renderedPages);
     } catch (err) {
-      console.error("Error processing PDF:", err);
-      setError("Erro ao processar o PDF. Verifique se o arquivo é válido e tente novamente.");
+      if (!catchPassword(err)) {
+        setError("Erro ao processar o PDF. Verifique se o arquivo é válido e tente novamente.");
+      }
     } finally {
       setLoading(false);
     }
-  }, [format, quality, dpi]);
+  }, [format, quality, dpi, replacePages, catchPassword]);
 
   const handleFileSelect = useCallback((selectedFile: File) => {
     setFile(selectedFile);
-    setPages([]);
+    replacePages([]);
     setError(null);
     setProgress(0);
-  }, []);
+    pdfPassword.reset();
+  }, [replacePages, pdfPassword]);
 
   useAdoptDroppedFile(handleFileSelect);
 
@@ -101,32 +141,23 @@ const PdfToImage = () => {
   };
 
   const downloadPage = (page: PageImage) => {
-    const ext = format === "jpeg" ? "jpg" : "png";
-    const link = document.createElement("a");
-    link.href = page.dataUrl;
-    link.download = `pagina-${page.pageNumber}.${ext}`;
-    link.click();
+    saveAs(page.blob, `pagina-${page.pageNumber}.${page.ext}`);
   };
 
   const downloadAll = async () => {
     if (pages.length === 0) return;
     const zip = new JSZip();
-    const ext = format === "jpeg" ? "jpg" : "png";
-
-    for (const page of pages) {
-      const base64 = page.dataUrl.split(",")[1];
-      zip.file(`pagina-${page.pageNumber}.${ext}`, base64, { base64: true });
-    }
-
+    for (const page of pages) zip.file(`pagina-${page.pageNumber}.${page.ext}`, page.blob);
     const blob = await zip.generateAsync({ type: "blob" });
     saveAs(blob, `pdf-imagens.zip`);
   };
 
   const reset = () => {
     setFile(null);
-    setPages([]);
+    replacePages([]);
     setProgress(0);
     setError(null);
+    pdfPassword.reset();
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -213,9 +244,17 @@ const PdfToImage = () => {
             </div>
           )}
 
+          {pdfPassword.request && (
+            <PdfPasswordPrompt
+              reason={pdfPassword.request}
+              busy={loading}
+              onSubmit={(pw) => { pdfPassword.provide(pw); void processFile(file, pw); }}
+            />
+          )}
+
           {/* Convert Button */}
           <Button
-            onClick={() => processFile(file)}
+            onClick={() => processFile(file, pdfPassword.password)}
             disabled={loading}
             className="w-full gap-2"
             size="lg"
@@ -265,7 +304,7 @@ const PdfToImage = () => {
                     <CardContent className="p-2">
                       <div className="relative">
                         <img
-                          src={page.dataUrl}
+                          src={page.url}
                           alt={`Página ${page.pageNumber}`}
                           className="w-full h-auto rounded"
                         />

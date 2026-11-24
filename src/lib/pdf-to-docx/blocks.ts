@@ -15,7 +15,7 @@
 
 import type { TextLine } from "./lines";
 import { trimLine } from "./lines";
-import type { StructBlock } from "./types";
+import type { Rgb, StructBlock } from "./types";
 
 export type Alignment = "left" | "center" | "right" | "justify";
 
@@ -72,6 +72,11 @@ export interface Paragraph {
   headerCell: boolean;
   /** Termina numa linha cheia, o que sugere que o texto continua adiante. */
   endsFull: boolean;
+  /** Fundo colorido por trás do parágrafo, quando o PDF desenhou um. */
+  shading: Rgb | null;
+  /** Caixa onde o parágrafo foi medido: a origem das paradas de tabulação. */
+  boxLeft: number;
+  boxRight: number;
 }
 
 /** Caixa útil da página, em pontos. */
@@ -125,7 +130,9 @@ export function detectListMarker(
   const token = first.text.trim().split(/\s+/)[0] ?? "";
   if (!token) return null;
 
-  const strongBullet = token.length === 1 && STRONG_BULLETS.has(token);
+  // O "o" em Courier New é a bala padrão do segundo nível das listas do Word.
+  const courierO = token === "o" && /courier/i.test(first.style.family) && first.text.trim() === "o";
+  const strongBullet = token.length === 1 && (STRONG_BULLETS.has(token) || courierO);
   const weakBullet = token.length === 1 && WEAK_BULLETS.has(token);
   const isBullet = strongBullet || weakBullet;
   const numberMatch = NUMBER_MARKER.exec(token);
@@ -195,6 +202,32 @@ function dropUnsupportedLists(paragraphs: Paragraph[]): void {
   }
 }
 
+/**
+ * Nível de cada item numa sequência de listas sem árvore de estrutura: o
+ * recuo do marcador. O subitem fica mais à direita que o item que o contém;
+ * sem o nível, ele virava um item comum, na mesma altura dos outros.
+ */
+function assignListLevels(paragraphs: Paragraph[]): void {
+  let run: Paragraph[] = [];
+  const flush = () => {
+    const indents: number[] = [];
+    for (const p of [...run].sort((a, b) => a.list!.markerIndent - b.list!.markerIndent)) {
+      const last = indents[indents.length - 1];
+      if (last === undefined || p.list!.markerIndent - last > 6) indents.push(p.list!.markerIndent);
+    }
+    for (const p of run) {
+      const level = indents.findIndex((x) => Math.abs(p.list!.markerIndent - x) <= 6);
+      p.list!.level = Math.max(0, Math.min(8, level));
+    }
+    run = [];
+  };
+  for (const p of paragraphs) {
+    if (p.list) run.push(p);
+    else if (run.length) flush();
+  }
+  if (run.length) flush();
+}
+
 /** Alinhamento e recuos de um conjunto de linhas dentro da caixa de conteúdo. */
 function measureLayout(lines: TextLine[], box: ContentBox, listTextStart: number | null) {
   const width = box.right - box.left;
@@ -244,15 +277,31 @@ function measureLayout(lines: TextLine[], box: ContentBox, listTextStart: number
   };
 }
 
-/** Distância típica entre linhas de base, para calibrar o que é "espaço extra". */
+/**
+ * Distância entre linhas de base *dentro* de um parágrafo, para calibrar o que
+ * é "espaço extra".
+ *
+ * É o menor salto que se repete, e não a mediana: num currículo, quase todo
+ * salto é entre um parágrafo curto e o seguinte, e a mediana virava a medida
+ * do espaço entre parágrafos — aí nenhum vão parecia extra, e "MBA… (2019)" e
+ * "Bacharelado…" se fundiam num parágrafo só.
+ */
 export function measureLeading(lines: TextLine[]): number {
   const deltas: number[] = [];
   for (let i = 1; i < lines.length; i++) {
     const d = lines[i].baseline - lines[i - 1].baseline;
     if (d > 0.5 && d < 200) deltas.push(d);
   }
-  const value = median(deltas);
-  return value > 0 ? value : (lines[0]?.fontSize ?? 12) * 1.2;
+  if (!deltas.length) return (lines[0]?.fontSize ?? 12) * 1.2;
+  const sorted = [...deltas].sort((a, b) => a - b);
+  const minFont = Math.min(...lines.map((l) => l.fontSize || 12));
+  const repeats = Math.max(2, Math.ceil(sorted.length * 0.15));
+  for (const d of sorted) {
+    // Salto menor que a própria letra não é linha de texto (expoente, ruído).
+    if (d < minFont * 0.9) continue;
+    if (sorted.filter((x) => Math.abs(x - d) <= 0.8).length >= Math.min(repeats, sorted.length)) return d;
+  }
+  return median(deltas);
 }
 
 /**
@@ -264,15 +313,35 @@ function startsNewParagraph(
   next: TextLine,
   box: ContentBox,
   leading: number,
+  /** Corpo de letra em que a entrelinha foi medida. */
+  referenceSize: number,
 ): boolean {
   const width = box.right - box.left;
   const delta = next.baseline - previous.baseline;
 
-  // Espaço vertical extra é o sinal mais confiável.
-  if (delta > leading * 1.28) return true;
+  // Espaço vertical extra é o sinal mais confiável. Com a entrelinha medida
+  // dentro do parágrafo, dois pontos a mais já são o "espaço depois" de um
+  // parágrafo, e não variação de linha. A entrelinha esperada acompanha o
+  // corpo da linha: as duas linhas de um título grande têm salto maior.
+  const expected = leading * (previous.fontSize > 0 && referenceSize > 0 ? previous.fontSize / referenceSize : 1);
+  if (delta > expected + Math.max(2, expected * 0.15)) return true;
 
-  // Mudança de corpo ou de peso separa título de corpo de texto.
+  // Mudança de corpo ou de peso separa título de corpo de texto. O peso
+  // importa por si: com entrelinha 1,5 no corpo e simples no título, o salto
+  // do título para o texto chega a ser menor que a própria entrelinha, e
+  // "CLÁUSULA PRIMEIRA — DO OBJETO" grudava no parágrafo de baixo. Título é
+  // linha curta, inteira em negrito, seguida de texto que não é.
   if (Math.abs(next.fontSize - previous.fontSize) > 0.6) return true;
+  const allBold = (l: TextLine) => {
+    const solid = l.runs.filter((r) => r.text.trim());
+    return solid.length > 0 && solid.every((r) => r.style.bold);
+  };
+  if (allBold(previous) !== allBold(next) && previous.right < box.right - width * 0.1) return true;
+
+  // Linha que começa com marcador de lista é item novo, mesmo colada na
+  // anterior: sem isto, o subitem grudava no fim do item de cima.
+  const marker = detectListMarker(next);
+  if (marker && (marker.strong || marker.kind === "number")) return true;
 
   // Recuo de primeira linha.
   if (next.left > previous.left + width * 0.04 && previous.right > box.right - width * 0.12) return true;
@@ -281,6 +350,22 @@ function startsNewParagraph(
   // é fim de parágrafo. O limite é alto porque, em texto alinhado à esquerda,
   // toda linha termina um pouco antes da margem.
   if (previous.right < box.right - width * 0.32 && next.left <= previous.left + width * 0.02) return true;
+
+  // Quebra forçada: a primeira palavra da linha de baixo caberia na de cima.
+  // Quebra automática nunca deixa sobrando espaço para a palavra seguinte, e
+  // linhas centralizadas de uma capa ("UNIVERSIDADE…", "CENTRO DE ESTUDOS…")
+  // se fundiam num parágrafo só, que o Word redistribuía em outras linhas.
+  const first = next.runs.find((r) => r.text.trim());
+  if (first) {
+    const word = first.text.trim().split(/\s+/)[0];
+    const perChar = first.width / Math.max(1, first.text.trimEnd().length);
+    const needed = word.length * perChar + previous.fontSize * 0.25;
+    const leftGap = previous.left - box.left;
+    const rightGap = box.right - previous.right;
+    const centered = leftGap > width * 0.05 && Math.abs(leftGap - rightGap) <= Math.max(3, width * 0.02);
+    const room = centered ? width - (previous.right - previous.left) : rightGap;
+    if (needed < room - Math.max(3, previous.fontSize * 0.5)) return true;
+  }
 
   return false;
 }
@@ -302,6 +387,7 @@ export function buildParagraphs(
   if (!ordered.length) return [];
 
   const leading = measureLeading(ordered);
+  const referenceSize = median(ordered.map((l) => l.fontSize));
   const groups: TextLine[][] = [];
 
   const byOrder = new Map(structBlocks.map((b) => [b.order, b]));
@@ -326,7 +412,7 @@ export function buildParagraphs(
         a && b && a.listItem !== null && a.listItem === b.listItem && Math.abs(line.baseline - previous.baseline) < 1.5;
       split = line.structBlock !== previous.structBlock && !sameListItem;
     } else {
-      split = startsNewParagraph(previous, line, box, leading);
+      split = startsNewParagraph(previous, line, box, leading, referenceSize);
     }
 
     if (split) groups.push([line]);
@@ -341,16 +427,32 @@ export function buildParagraphs(
     const markerFont = group[0].runs.find((r) => r.text.trim())?.style.family ?? "Symbol";
 
     if (struct?.listItem !== null && struct?.listItem !== undefined) {
+      // O rótulo do item (`Lbl`) é o marcador, seja ele qual for — inclusive o
+      // "o" que o Word usa no segundo nível das listas com bala, e que pela
+      // forma pareceria texto. Sem isso, o "o" ficava no texto e ganhava uma
+      // bala na frente.
+      const label = group[0].runs.find((r) => r.structBlock !== null && byOrder.get(r.structBlock)?.role === "Lbl");
+      const labelText = label?.text.trim() ?? "";
+      const labelNext = label ? group[0].runs[group[0].runs.indexOf(label) + 1] : undefined;
       const detected = detectListMarker(group[0]);
+      const fromLabel = labelText
+        ? {
+            marker: labelText,
+            kind: /^(\d+(?:\.\d+)*|[a-zA-Z]|[ivxlcdmIVXLCDM]+)[.)\]]$/.test(labelText) || /^\d+$/.test(labelText)
+              ? ("number" as const)
+              : ("bullet" as const),
+            textStart: labelNext?.x ?? null,
+          }
+        : null;
       list = {
-        kind: detected?.kind ?? "bullet",
+        kind: fromLabel?.kind ?? detected?.kind ?? "bullet",
         level: Math.max(0, struct.listDepth - 1),
-        marker: detected?.marker ?? "•",
+        marker: fromLabel?.marker ?? detected?.marker ?? "•",
         markerIndent: Math.max(0, group[0].left - box.left),
-        markerFont,
+        markerFont: label?.style.family ?? markerFont,
         structItem: struct.listItem,
       };
-      listTextStart = detected?.textStart ?? null;
+      listTextStart = fromLabel?.textStart ?? detected?.textStart ?? null;
     } else if (!structured) {
       const detected = detectListMarker(group[0]);
       if (detected) {
@@ -385,12 +487,18 @@ export function buildParagraphs(
       tableCell: struct?.tableCell ?? null,
       headerCell: struct?.role === "TH",
       endsFull: group[group.length - 1].right >= box.right - (box.right - box.left) * 0.06,
+      shading: null,
+      boxLeft: box.left,
+      boxRight: box.right,
     };
   });
 
   // A árvore de estrutura já disse o que é lista; sem ela, o palpite precisa
   // ser conferido contra os vizinhos antes de valer.
-  if (!structured) dropUnsupportedLists(paragraphs);
+  if (!structured) {
+    dropUnsupportedLists(paragraphs);
+    assignListLevels(paragraphs);
+  }
 
   // Proporção entre entrelinha e corpo de letra observada neste documento,
   // medida só onde ela é conhecida de fato — dentro de parágrafos de mais de

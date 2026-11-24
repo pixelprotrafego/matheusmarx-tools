@@ -10,7 +10,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { PDFDocument, PDFName, PDFDict, PDFRawStream, PDFNumber } from "pdf-lib";
+import { PDFDocument, PDFName, PDFDict, PDFRawStream, PDFNumber } from "@cantoo/pdf-lib";
 
 const [entrada, saidaDir, prefixo = "pagina"] = process.argv.slice(2);
 if (!entrada) {

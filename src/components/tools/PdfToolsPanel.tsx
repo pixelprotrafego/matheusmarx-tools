@@ -1,4 +1,4 @@
-import { Combine, Scissors, RotateCw, Stamp, Minimize2, ListOrdered, Layers, ImageDown } from "lucide-react";
+import { Combine, Scissors, RotateCw, Stamp, Minimize2, ListOrdered, Layers, ImageDown, Lock } from "lucide-react";
 import SubToolPanel, { type SubTool } from "./shared/SubToolPanel";
 import PdfMerger from "./PdfMerger";
 import PdfCutter from "./PdfCutter";
@@ -8,6 +8,7 @@ import PdfCompressor from "./PdfCompressor";
 import PdfReorder from "./PdfReorder";
 import PdfFlatten from "./PdfFlatten";
 import PdfExtractImages from "./PdfExtractImages";
+import PdfPassword from "./PdfPassword";
 
 const tools: SubTool[] = [
   { key: "merge", icon: Combine, title: "Unir PDF", description: "Combine múltiplos PDFs em um só arquivo", render: () => <PdfMerger /> },
@@ -18,6 +19,7 @@ const tools: SubTool[] = [
   { key: "reorder", icon: ListOrdered, title: "Reordenar páginas", description: "Define a nova ordem das páginas", isNew: true, render: () => <PdfReorder /> },
   { key: "flatten", icon: Layers, title: "Achatar formulário", description: "Converte campos em conteúdo fixo", isNew: true, render: () => <PdfFlatten /> },
   { key: "extract", icon: ImageDown, title: "Extrair páginas em PNG", description: "Renderiza cada página como imagem", isNew: true, render: () => <PdfExtractImages /> },
+  { key: "password", icon: Lock, title: "Proteger com senha", description: "Criptografa o PDF com AES-256", isNew: true, render: () => <PdfPassword /> },
 ];
 
 const PdfToolsPanel = () => <SubToolPanel tools={tools} />;

@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { ShieldOff, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Dropzone from "./shared/Dropzone";
+import PdfPasswordPrompt from "./shared/PdfPasswordPrompt";
+import { usePdfPassword } from "./shared/use-pdf-password";
 import {
   scanMetadata,
   scrubMetadata,
@@ -18,15 +20,11 @@ const MetadataScrubber = () => {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [heicFormat, setHeicFormat] = useState<"jpg" | "png">("jpg");
+  const pdfPassword = usePdfPassword();
 
-  const onFiles = async (files: File[]) => {
-    const f = files[0];
-    if (!f) return;
-    setFile(f);
-    setDone(false);
-    setScan(null);
+  const inspect = async (f: File, password?: string) => {
     try {
-      const result = await scanMetadata(f);
+      const result = await scanMetadata(f, password);
       if (result.kind === "unknown") {
         toast.error("Formato não suportado", {
           description: "Use JPG, PNG, WEBP, HEIC ou PDF.",
@@ -35,17 +33,28 @@ const MetadataScrubber = () => {
       }
       setScan(result);
     } catch (e) {
+      if (pdfPassword.catchPassword(e)) return;
       toast.error("Falha ao ler metadados", {
         description: e instanceof Error ? e.message : String(e),
       });
     }
   };
 
+  const onFiles = async (files: File[]) => {
+    const f = files[0];
+    if (!f) return;
+    setFile(f);
+    setDone(false);
+    setScan(null);
+    pdfPassword.reset();
+    await inspect(f);
+  };
+
   const clean = async () => {
     if (!file || !scan) return;
     setBusy(true);
     try {
-      const blob = await scrubMetadata(file, scan.kind, heicFormat);
+      const blob = await scrubMetadata(file, scan.kind, heicFormat, pdfPassword.password);
       const ext =
         scan.kind === "jpg" ? "jpg" :
         scan.kind === "png" ? "png" :
@@ -67,6 +76,7 @@ const MetadataScrubber = () => {
     setFile(null);
     setScan(null);
     setDone(false);
+    pdfPassword.reset();
   };
 
   const sensitiveCount = scan?.fields.filter((f) => f.sensitive).length ?? 0;
@@ -88,6 +98,13 @@ const MetadataScrubber = () => {
           accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,application/pdf"
           title="Solte uma imagem ou PDF aqui"
           hint="JPG, PNG, WEBP, HEIC ou PDF — 1 arquivo por vez"
+        />
+      )}
+
+      {file && !scan && pdfPassword.request && (
+        <PdfPasswordPrompt
+          reason={pdfPassword.request}
+          onSubmit={(pw) => { pdfPassword.provide(pw); void inspect(file, pw); }}
         />
       )}
 

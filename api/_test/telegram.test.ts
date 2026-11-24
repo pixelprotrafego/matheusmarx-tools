@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument } from "@cantoo/pdf-lib";
 import { POST as webhook } from "../telegram.js";
 import { deriveWebhookSecret } from "../_lib/telegram.js";
 import { HELP_TEXT } from "../_lib/commands.js";

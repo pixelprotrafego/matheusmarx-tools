@@ -1,5 +1,6 @@
 // Detecta e remove metadados de imagens e PDFs. 100% client-side.
-import { PDFDocument } from "pdf-lib";
+import { keepOpenPassword, loadPdfLib, openPdf, PdfPasswordError } from "./pdf-unlock";
+import { dropUnreachableObjects, stripMetadata } from "./pdf-cleanup";
 
 export interface MetaField {
   key: string;
@@ -287,28 +288,33 @@ function scanWebp(bytes: Uint8Array): MetaField[] {
   return fields;
 }
 
-async function scanPdf(bytes: Uint8Array): Promise<MetaField[]> {
+async function scanPdf(bytes: Uint8Array, password?: string): Promise<MetaField[]> {
   const fields: MetaField[] = [];
-  try {
-    const doc = await PDFDocument.load(bytes, { updateMetadata: false });
-    const add = (k: string, v: string | Date | undefined) => {
-      if (!v) return;
-      const s = v instanceof Date ? v.toISOString() : String(v);
-      if (s.trim()) fields.push({ key: k, value: s });
-    };
-    add("Title", doc.getTitle());
-    add("Author", doc.getAuthor());
-    add("Subject", doc.getSubject());
-    add("Keywords", doc.getKeywords());
-    add("Producer", doc.getProducer());
-    add("Creator", doc.getCreator());
-    add("CreationDate", doc.getCreationDate());
-    add("ModificationDate", doc.getModificationDate());
-    fields.push({ key: "PageCount", value: String(doc.getPageCount()) });
-    fields.push({ key: "FileSize", value: `${(bytes.length / 1024).toFixed(1)} KB` });
-  } catch {
-    // ignore
+  const { PDFName, PDFDict, PDFString, PDFHexString } = await loadPdfLib();
+  const { doc } = await openPdf(bytes, password, { updateMetadata: false });
+
+  // O dicionário Info inteiro, e não só as chaves com setter no pdf-lib: o Word
+  // e outros editores gravam chaves próprias ("Company", "SourceModified"...).
+  const info = doc.context.lookup(doc.context.trailerInfo.Info);
+  if (info instanceof PDFDict) {
+    for (const [key, value] of info.entries()) {
+      const name = key.asString().replace(/^\//, "");
+      let text = "";
+      if (value instanceof PDFString || value instanceof PDFHexString) text = value.decodeText();
+      else text = value?.toString() ?? "";
+      if (/Date$/.test(name)) {
+        const date = name === "CreationDate" ? doc.getCreationDate() : name === "ModDate" ? doc.getModificationDate() : undefined;
+        if (date) text = date.toISOString();
+      }
+      if (text.trim()) fields.push({ key: name, value: text });
+    }
   }
+
+  // XMP: o mesmo autor, título e datas, num bloco XML à parte.
+  if (doc.catalog.has(PDFName.of("Metadata"))) {
+    fields.push({ key: "XMP", value: "Bloco XMP com autor, ferramenta e datas" });
+  }
+
   return fields;
 }
 
@@ -464,7 +470,15 @@ function scanHeic(bytes: Uint8Array): MetaField[] {
   return fields;
 }
 
-export async function scanMetadata(file: File): Promise<MetaScanResult> {
+/**
+ * Lê os metadados do arquivo. Lista vazia quer dizer arquivo limpo — e é isso
+ * que a tela mostra; um campo "Status" de enchimento fazia a lista nunca ficar
+ * vazia, e a mensagem de arquivo limpo nunca aparecia.
+ *
+ * PDF com senha de abertura lança `PdfPasswordError`; a tela pede a senha e
+ * chama de novo com ela.
+ */
+export async function scanMetadata(file: File, password?: string): Promise<MetaScanResult> {
   const bytes = await readBytes(file);
   const kind = detectKind(file, bytes);
   let fields: MetaField[] = [];
@@ -472,12 +486,11 @@ export async function scanMetadata(file: File): Promise<MetaScanResult> {
   else if (kind === "png") fields = scanPng(bytes);
   else if (kind === "webp") fields = scanWebp(bytes);
   else if (kind === "heic") fields = scanHeic(bytes);
-  else if (kind === "pdf") fields = await scanPdf(bytes);
-  if (kind !== "unknown" && fields.length === 0) {
-    fields = [{ key: "Status", value: "Sem metadados detectados" }];
-  }
+  else if (kind === "pdf") fields = await scanPdf(bytes, password);
   return { kind, fields: mark(fields) };
 }
+
+export { PdfPasswordError };
 
 // --- Scrubbing ---------------------------------------------------------------------
 
@@ -507,20 +520,15 @@ async function scrubImageViaCanvas(file: File, mime: string): Promise<Blob> {
   }
 }
 
-async function scrubPdf(file: File): Promise<Blob> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const doc = await PDFDocument.load(bytes);
-  doc.setTitle("");
-  doc.setAuthor("");
-  doc.setSubject("");
-  doc.setKeywords([]);
-  doc.setProducer("");
-  doc.setCreator("");
-  // Re-zera datas em uma referência fixa e neutra.
-  const epoch = new Date(0);
-  doc.setCreationDate(epoch);
-  doc.setModificationDate(epoch);
-  const out = await doc.save({ useObjectStreams: true });
+async function scrubPdf(file: File, password?: string): Promise<Blob> {
+  const lib = await loadPdfLib();
+  const opened = await openPdf(new Uint8Array(await file.arrayBuffer()), password, { updateMetadata: false });
+  stripMetadata(lib, opened.doc);
+  // Edições incrementais deixam as versões antigas do Info no arquivo, como
+  // objetos que ninguém mais referencia — com o autor original dentro.
+  dropUnreachableObjects(lib, opened.doc);
+  keepOpenPassword(opened);
+  const out = await opened.doc.save({ useObjectStreams: true });
   return new Blob([out.slice().buffer], { type: "application/pdf" });
 }
 
@@ -550,6 +558,7 @@ export async function scrubMetadata(
   file: File,
   kind: MetaScanResult["kind"],
   outputFormat: "jpg" | "png" = "jpg",
+  password?: string,
 ): Promise<Blob> {
   switch (kind) {
     case "jpg":
@@ -561,7 +570,7 @@ export async function scrubMetadata(
     case "heic":
       return scrubHeicAs(file, outputFormat);
     case "pdf":
-      return scrubPdf(file);
+      return scrubPdf(file, password);
     default:
       throw new Error("Formato não suportado para limpeza");
   }

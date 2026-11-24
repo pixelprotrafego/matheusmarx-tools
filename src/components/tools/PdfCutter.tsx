@@ -4,8 +4,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Upload, Download, Loader2, X, FileText, CheckSquare, Square } from "lucide-react";
-import { PDFDocument } from "pdf-lib";
 import { saveAs } from "file-saver";
+import ErrorState from "./shared/ErrorState";
+import PdfPasswordPrompt from "./shared/PdfPasswordPrompt";
+import { usePdfPassword } from "./shared/use-pdf-password";
+import { keepOpenPassword, loadPdfLib, openPdf, openPdfjs } from "@/lib/pdf-unlock";
 
 interface PageThumb {
   dataUrl: string;
@@ -21,19 +24,22 @@ const PdfCutter = () => {
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pdfPassword = usePdfPassword();
+  const { catchPassword } = pdfPassword;
 
-  const processFile = useCallback(async (selectedFile: File) => {
+  const processFile = useCallback(async (selectedFile: File, password?: string) => {
     setFile(selectedFile);
     setLoading(true);
     setProgress(0);
     setPages([]);
+    setError(null);
 
     try {
-      const { pdfjsLib } = await import("@/lib/pdfjs-setup");
       const arrayBuffer = await selectedFile.arrayBuffer();
       setPdfBytes(arrayBuffer.slice(0));
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pdf = await openPdfjs(arrayBuffer, password);
       const totalPages = pdf.numPages;
       const thumbs: PageThumb[] = [];
 
@@ -55,23 +61,23 @@ const PdfCutter = () => {
       }
 
       setPages(thumbs);
-    } catch (error) {
-      console.error("Error processing PDF:", error);
+    } catch (err) {
+      if (!catchPassword(err)) setError(err instanceof Error ? err.message : "Não foi possível abrir este PDF.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [catchPassword]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile?.type === "application/pdf") processFile(droppedFile);
-  }, [processFile]);
+    if (droppedFile?.type === "application/pdf") { pdfPassword.reset(); processFile(droppedFile); }
+  }, [processFile, pdfPassword]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) processFile(f);
+    if (f) { pdfPassword.reset(); processFile(f); }
   };
 
   const togglePage = (pageNumber: number) => {
@@ -90,22 +96,25 @@ const PdfCutter = () => {
   const generateCutPdf = async () => {
     if (!pdfBytes || selectedCount === 0) return;
     setGenerating(true);
+    setError(null);
 
     try {
-      const srcDoc = await PDFDocument.load(pdfBytes);
+      const { PDFDocument } = await loadPdfLib();
+      const opened = await openPdf(pdfBytes, pdfPassword.password);
       const newDoc = await PDFDocument.create();
       const selectedPages = pages.filter((p) => p.selected).map((p) => p.pageNumber - 1);
-      const copiedPages = await newDoc.copyPages(srcDoc, selectedPages);
+      const copiedPages = await newDoc.copyPages(opened.doc, selectedPages);
 
       for (const page of copiedPages) {
         newDoc.addPage(page);
       }
 
+      keepOpenPassword({ ...opened, doc: newDoc });
       const pdfBytesOut = await newDoc.save();
       const blob = new Blob([pdfBytesOut.buffer as ArrayBuffer], { type: "application/pdf" });
       saveAs(blob, `pdf-cortado-${selectedCount}pgs.pdf`);
-    } catch (error) {
-      console.error("Error generating PDF:", error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível gerar o PDF.");
     } finally {
       setGenerating(false);
     }
@@ -116,6 +125,8 @@ const PdfCutter = () => {
     setPdfBytes(null);
     setPages([]);
     setProgress(0);
+    setError(null);
+    pdfPassword.reset();
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -153,6 +164,16 @@ const PdfCutter = () => {
               <X className="w-4 h-4" />
             </Button>
           </div>
+
+          {pdfPassword.request && (
+            <PdfPasswordPrompt
+              reason={pdfPassword.request}
+              busy={loading}
+              onSubmit={(pw) => { pdfPassword.provide(pw); void processFile(file, pw); }}
+            />
+          )}
+
+          {error && !loading && <ErrorState message={error} />}
 
           {loading && (
             <div className="space-y-2">

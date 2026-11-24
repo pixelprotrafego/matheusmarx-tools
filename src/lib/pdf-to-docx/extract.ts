@@ -77,6 +77,30 @@ const toRgb = (value: unknown): Rgb => {
   return { ...BLACK };
 };
 
+/**
+ * Forma pequena e quase quadrada pintada na página: candidata a bala de lista.
+ * O Chromium e outros geradores desenham a bala como um círculo vetorial, e
+ * não como letra — sem isto, os itens de lista saíam sem bala nenhuma.
+ */
+interface SmallMark {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: Rgb;
+  round: boolean;
+}
+
+/** O que interessa de uma fonte do PDF. */
+interface FontInfo {
+  name: string;
+  fallback: string;
+  unitsPerEm: number;
+  /** Marcas do descritor da fonte: pegam o negrito de fonte com nome cifrado. */
+  bold: boolean;
+  italic: boolean;
+}
+
 /** Estado gráfico salvo/restaurado por `save` e `restore`. */
 interface GState {
   ctm: Matrix;
@@ -95,6 +119,11 @@ interface StyleEvent {
   size: number;
   /** Modo de renderização 3 é texto invisível — camada de OCR, por exemplo. */
   invisible: boolean;
+  /**
+   * Preenchido e contornado (modo 2): é como o Word e outros geradores
+   * desenham negrito quando a fonte não tem a variante negrita.
+   */
+  fakeBold: boolean;
 }
 
 /** Espera um objeto do pdf.js que pode ainda estar sendo decodificado. */
@@ -126,13 +155,14 @@ async function walkOperators(
   pdfjs: PdfLibLike,
   page: PdfPageLike,
   viewportTransform: number[],
-  rasterize: (image: unknown, width: number, height: number) => Promise<Uint8Array | null>,
+  rasterize: (image: unknown, width: number, height: number) => Promise<EncodedImage | null>,
 ): Promise<{
   styles: StyleEvent[];
   images: PlacedImage[];
   rules: RuleSegment[];
   fills: FilledArea[];
-  fontNames: Map<string, { name: string; fallback: string }>;
+  fontNames: Map<string, FontInfo>;
+  marks: SmallMark[];
 }> {
   const { OPS } = pdfjs;
   const list = await page.getOperatorList();
@@ -141,7 +171,7 @@ async function walkOperators(
   const images: PlacedImage[] = [];
   const rules: RuleSegment[] = [];
   const fills: FilledArea[] = [];
-  const fontNames = new Map<string, { name: string; fallback: string; unitsPerEm: number }>();
+  const fontNames = new Map<string, FontInfo>();
 
   let gs: GState = { ctm: [...viewportTransform] as Matrix, fill: { ...BLACK }, stroke: { ...BLACK }, lineWidth: 1, fillAlpha: 1 };
   const stack: GState[] = [];
@@ -158,6 +188,9 @@ async function walkOperators(
   let renderMode = 0;
   let fontUnitsPerEm = 0.001;
 
+  const marks: SmallMark[] = [];
+  /** O caminho em construção tem curva? Círculo de bala, e não quadrado. */
+  let pathHasCurve = false;
   /** Caminho em construção, já em coordenadas da viewport. */
   let path: { x: number; y: number }[][] = [];
   let pendingRects: { x: number; y: number; w: number; h: number }[] = [];
@@ -181,6 +214,23 @@ async function walkOperators(
   const emitPath = (mode: "fill" | "stroke") => {
     const color = mode === "fill" ? gs.fill : gs.stroke;
     const scale = Math.hypot(gs.ctm[0], gs.ctm[1]) || 1;
+
+    if (mode === "fill") {
+      const shapes = [
+        ...path.map((sub) => ({ xs: sub.map((p) => p.x), ys: sub.map((p) => p.y), round: pathHasCurve })),
+        ...pendingRects.map((r) => ({ xs: [r.x, r.x + r.w], ys: [r.y, r.y + r.h], round: false })),
+      ];
+      for (const shape of shapes) {
+        if (!shape.xs.length) continue;
+        const x = Math.min(...shape.xs);
+        const y = Math.min(...shape.ys);
+        const w = Math.max(...shape.xs) - x;
+        const h = Math.max(...shape.ys) - y;
+        if (w >= 1.5 && w <= 8 && h >= 1.5 && h <= 8 && Math.abs(w - h) <= 1.5) {
+          marks.push({ x, y, width: w, height: h, color: { ...color }, round: shape.round });
+        }
+      }
+    }
 
     for (const rect of pendingRects) {
       const w = Math.abs(rect.w);
@@ -221,6 +271,7 @@ async function walkOperators(
 
     path = [];
     pendingRects = [];
+    pathHasCurve = false;
   };
 
   for (let i = 0; i < list.fnArray.length; i++) {
@@ -236,6 +287,18 @@ async function walkOperators(
         break;
       case OPS.transform:
         gs.ctm = multiply(gs.ctm, args as unknown as number[]);
+        break;
+      // Form XObject: o conteúdo de dentro é desenhado com a matriz do próprio
+      // form, como faz o canvas do pdf.js. Sem ela, logotipos, carimbos e
+      // tabelas desenhados dentro de um form saíam no lugar errado da página.
+      case OPS.paintFormXObjectBegin: {
+        stack.push(cloneState(gs));
+        const matrix = (args as unknown as [number[] | null])[0];
+        if (Array.isArray(matrix) && matrix.length === 6) gs.ctm = multiply(gs.ctm, matrix);
+        break;
+      }
+      case OPS.paintFormXObjectEnd:
+        gs = stack.pop() ?? gs;
         break;
       case OPS.setLineWidth:
         gs.lineWidth = args[0] as unknown as number;
@@ -263,10 +326,12 @@ async function walkOperators(
             [cx, cy] = [coords[k++], coords[k++]];
             current.push(pointOf(cx, cy));
           } else if (op === OPS.curveTo) {
+            pathHasCurve = true;
             k += 4;
             [cx, cy] = [coords[k++], coords[k++]];
             current.push(pointOf(cx, cy));
           } else if (op === OPS.curveTo2 || op === OPS.curveTo3) {
+            pathHasCurve = true;
             k += 2;
             [cx, cy] = [coords[k++], coords[k++]];
             current.push(pointOf(cx, cy));
@@ -301,6 +366,7 @@ async function walkOperators(
       case OPS.endPath:
         path = [];
         pendingRects = [];
+        pathHasCurve = false;
         break;
 
       // ----- texto -----
@@ -313,12 +379,14 @@ async function walkOperators(
         fontSize = args[1] as unknown as number;
         if (fontRef && !fontNames.has(fontRef)) {
           const f = (await resolveObject(page.commonObjs, fontRef)) as
-            | { name?: string; fallbackName?: string; fontMatrix?: number[] }
+            | { name?: string; fallbackName?: string; fontMatrix?: number[]; bold?: boolean; black?: boolean; italic?: boolean }
             | null;
           fontNames.set(fontRef, {
             name: f?.name ?? "",
             fallback: f?.fallbackName ?? "",
             unitsPerEm: f?.fontMatrix?.[0] ?? 0.001,
+            bold: Boolean(f?.bold || f?.black),
+            italic: Boolean(f?.italic),
           });
         }
         // Relido a cada troca, e não só na primeira: voltar para uma fonte já
@@ -362,13 +430,16 @@ async function walkOperators(
       case OPS.showText:
       case OPS.showSpacedText: {
         const placed = multiply(gs.ctm, textMatrix);
+        // Modo 1 (só contorno) pinta com a cor do traço, não a de preenchimento.
+        const mode = renderMode & 3;
         styles.push({
           x: placed[4],
           y: placed[5],
-          fill: { ...gs.fill },
+          fill: mode === 1 ? { ...gs.stroke } : { ...gs.fill },
           fontRef,
           size: fontSize,
           invisible: renderMode === 3 || renderMode === 7,
+          fakeBold: mode === 2 && gs.lineWidth > 0,
         });
         // Avança a matriz de texto pela largura dos glifos, para o próximo
         // `showText` sem reposicionamento cair no x certo. Sem isso, dois
@@ -416,12 +487,13 @@ async function walkOperators(
         if (!(width > 1 && height > 1)) break;
 
         const meta = image as { width?: number; height?: number };
-        const png = await rasterize(image, meta.width ?? 0, meta.height ?? 0);
-        if (!png) break;
+        const encoded = await rasterize(image, meta.width ?? 0, meta.height ?? 0);
+        if (!encoded) break;
 
         images.push({
           x, y, width, height,
-          data: png,
+          data: encoded.data,
+          format: encoded.format,
           pixelWidth: meta.width ?? Math.round(width),
           pixelHeight: meta.height ?? Math.round(height),
           order: imageOrder++,
@@ -433,7 +505,7 @@ async function walkOperators(
     }
   }
 
-  return { styles, images, rules, fills, fontNames };
+  return { styles, images, rules, fills, fontNames, marks };
 }
 
 /**
@@ -443,7 +515,12 @@ async function walkOperators(
  * derrubar a conversão do documento inteiro — o resto do texto vale mais do
  * que aquela figura.
  */
-async function imageToPng(image: unknown, width: number, height: number): Promise<Uint8Array | null> {
+interface EncodedImage {
+  data: Uint8Array;
+  format: "png" | "jpg";
+}
+
+async function imageToPng(image: unknown, width: number, height: number): Promise<EncodedImage | null> {
   try {
     return await encodeImage(image, width, height);
   } catch {
@@ -451,7 +528,7 @@ async function imageToPng(image: unknown, width: number, height: number): Promis
   }
 }
 
-async function encodeImage(image: unknown, width: number, height: number): Promise<Uint8Array | null> {
+async function encodeImage(image: unknown, width: number, height: number): Promise<EncodedImage | null> {
   if (typeof document === "undefined" || !width || !height) return null;
 
   const canvas = document.createElement("canvas");
@@ -502,9 +579,25 @@ async function encodeImage(image: unknown, width: number, height: number): Promi
     return null;
   }
 
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  // Foto e página escaneada vão em JPEG de alta qualidade; o resto em PNG,
+  // sem perda. Transparência obriga PNG: JPEG não tem canal alfa.
+  let opaque = true;
+  if (width * height > 250_000) {
+    const pixels = ctx.getImageData(0, 0, width, height).data;
+    for (let i = 3; i < pixels.length; i += 4 * 97) {
+      if (pixels[i] < 250) {
+        opaque = false;
+        break;
+      }
+    }
+  }
+  const format: EncodedImage["format"] = opaque && width * height > 250_000 ? "jpg" : "png";
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, format === "jpg" ? "image/jpeg" : "image/png", 0.92));
+  canvas.width = 0;
+  canvas.height = 0;
   if (!blob) return null;
-  return new Uint8Array(await blob.arrayBuffer());
+  return { data: new Uint8Array(await blob.arrayBuffer()), format };
 }
 
 /** Papéis da árvore de estrutura que fecham um bloco de texto. */
@@ -616,7 +709,7 @@ export async function extractPage(
   index: number,
 ): Promise<PageContent> {
   const viewport = page.getViewport({ scale: 1 });
-  const { styles, images, rules, fills, fontNames } = await walkOperators(
+  const { styles, images, rules, fills, fontNames, marks } = await walkOperators(
     pdfjs,
     page,
     viewport.transform,
@@ -666,11 +759,6 @@ export async function extractPage(
     const event = styleAt(styles, x, baseline);
     if (event?.invisible) continue;
 
-    const parsed = parseFontName(
-      event?.fontRef ? fontNames.get(event.fontRef)?.name : undefined,
-      event?.fontRef ? fontNames.get(event.fontRef)?.fallback : undefined,
-    );
-
     // O id do marcado mais interno é o que aponta para o bloco mais fino da
     // árvore; os de fora só existem para agrupar.
     let structBlock: number | null = null;
@@ -679,21 +767,91 @@ export async function extractPage(
       if (id && byContentId.has(id)) structBlock = byContentId.get(id) ?? null;
     }
 
-    runs.push({
-      text: item.str,
-      x,
-      baseline,
-      width: item.width ?? 0,
-      style: {
+    const styleOf = (e: StyleEvent | null) => {
+      const fontInfo = e?.fontRef ? fontNames.get(e.fontRef) : undefined;
+      const parsed = parseFontName(fontInfo?.name, fontInfo?.fallback);
+      return {
         family: parsed.family,
         size: Math.round(size * 100) / 100,
-        bold: parsed.bold,
-        italic: parsed.italic,
-        color: event?.fill ?? { ...BLACK },
-      },
-      artifact: markedStack.some((m) => m.tag === "Artifact"),
-      endsLine: Boolean(item.hasEOL),
-      structBlock,
+        bold: parsed.bold || Boolean(e?.fakeBold) || Boolean(fontInfo?.bold),
+        italic: parsed.italic || Boolean(fontInfo?.italic),
+        color: e?.fill ?? { ...BLACK },
+      };
+    };
+
+    // O pdf.js junta num item só o texto contíguo da mesma linha, mesmo que a
+    // cor ou a fonte mudem no meio ("e texto colorido."): o item inteiro
+    // ficava com o estilo do começo, e o vermelho saía preto. O item é partido
+    // onde o PDF trocou de estilo, na posição proporcional ao texto.
+    const text = item.str;
+    const width = item.width ?? 0;
+    const cuts: { index: number; event: StyleEvent }[] = [];
+    if (event && width > 0 && text.length > 1) {
+      let current = event;
+      const inside = styles
+        .filter((e) => Math.abs(e.y - baseline) <= 1.5 && e.x > x + 0.5 && e.x < x + width - 0.5)
+        .sort((a, b) => a.x - b.x);
+      for (const e of inside) {
+        const same = e.fontRef === current.fontRef && e.fill.r === current.fill.r && e.fill.g === current.fill.g &&
+          e.fill.b === current.fill.b && e.fakeBold === current.fakeBold;
+        if (same || e.invisible) continue;
+        let index = Math.round(((e.x - x) / width) * text.length);
+        // A troca de estilo quase sempre cai na fronteira de uma palavra.
+        for (const d of [0, 1, -1, 2, -2]) {
+          const i = index + d;
+          if (i > 0 && i < text.length && (/\s/.test(text[i - 1]) || /\s/.test(text[i]))) {
+            index = i;
+            break;
+          }
+        }
+        const last = cuts[cuts.length - 1]?.index ?? 0;
+        if (index <= last || index >= text.length) continue;
+        cuts.push({ index, event: e });
+        current = e;
+      }
+    }
+
+    const pieces = [{ from: 0, event }, ...cuts.map((c) => ({ from: c.index, event: c.event }))];
+    pieces.forEach((piece, i) => {
+      const to = i + 1 < pieces.length ? pieces[i + 1].from : text.length;
+      const share = text.length ? width / text.length : 0;
+      runs.push({
+        text: text.slice(piece.from, to),
+        x: x + piece.from * share,
+        baseline,
+        width: pieces.length > 1 ? (to - piece.from) * share : width,
+        style: styleOf(piece.event),
+        artifact: markedStack.some((m) => m.tag === "Artifact"),
+        endsLine: Boolean(item.hasEOL) && to === text.length,
+        structBlock,
+      });
+    });
+  }
+
+  // Bala desenhada como forma, logo antes do texto de uma linha: vira um
+  // trecho "•" (ou "▪", se quadrada) na linha de base daquele texto, e a
+  // detecção de lista cuida do resto.
+  for (const mark of marks) {
+    const cy = mark.y + mark.height / 2;
+    const after = runs
+      .filter((r) => r.text.trim() && r.x > mark.x + mark.width && r.x - (mark.x + mark.width) < 40)
+      .filter((r) => cy <= r.baseline && cy >= r.baseline - r.style.size * 0.8)
+      .sort((a, b) => a.x - b.x)[0];
+    if (!after) continue;
+    // Uma forma colada ao texto, dentro da palavra, não é bala.
+    const before = runs.some(
+      (r) => r.text.trim() && r.x < mark.x && r.x + r.width > mark.x - 4 && Math.abs(r.baseline - after.baseline) < 2,
+    );
+    if (before) continue;
+    runs.push({
+      text: mark.round ? "•" : "▪",
+      x: mark.x,
+      baseline: after.baseline,
+      width: mark.width,
+      style: { ...after.style, color: mark.color, bold: false, italic: false },
+      artifact: after.artifact,
+      endsLine: false,
+      structBlock: after.structBlock,
     });
   }
 
