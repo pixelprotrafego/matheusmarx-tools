@@ -116,3 +116,57 @@ describe("formatNumber", () => {
     expect(formatNumber(NaN)).toBe("Erro");
   });
 });
+
+describe("evaluate — correções", () => {
+  it("menos unário abaixo da potência, como na matemática", () => {
+    expect(evaluate("-2^2")).toBe(-4);
+    expect(evaluate("(-2)^2")).toBe(4);
+    expect(evaluate("2^-2")).toBe(0.25);
+    expect(evaluate("2*-3^2")).toBe(-18);
+    expect(evaluate("-3!")).toBe(-6);
+  });
+
+  it("multiplicação implícita: 2π, 3(1+1), (2)(3)", () => {
+    expect(evaluate("2π")).toBeCloseTo(2 * Math.PI, 12);
+    expect(evaluate("3(1+1)")).toBe(6);
+    expect(evaluate("(2)(3)")).toBe(6);
+    expect(evaluate("2sqrt(9)")).toBe(6);
+  });
+
+  it("porcentagem pega só o número à esquerda", () => {
+    expect(evaluate("2^50%")).toBeCloseTo(Math.SQRT2, 12);
+  });
+
+  it("lê o próprio resultado em notação científica e a vírgula decimal", () => {
+    expect(evaluate("1.5e-7*2")).toBeCloseTo(3e-7, 20);
+    expect(evaluate(formatNumber(1e20) + "/1e20")).toBe(1);
+    expect(evaluate("2,5*2")).toBe(5);
+  });
+
+  it("recusa número com dois pontos em vez de ler só o começo", () => {
+    expect(() => evaluate("1.2.3")).toThrow(/Número inválido/);
+  });
+
+  it("ângulos notáveis dão o valor exato", () => {
+    expect(evaluate("sin(180)")).toBe(0);
+    expect(evaluate("cos(90)")).toBe(0);
+    expect(evaluate("sin(pi)", "rad")).toBe(0);
+    expect(() => evaluate("tan(90)")).toThrow(/Resultado inválido/);
+  });
+
+  it("resto com o sinal do divisor", () => {
+    expect(evaluate("-7 mod 3")).toBe(2);
+    expect(evaluate("7 mod 3")).toBe(1);
+  });
+});
+
+describe("formatNumber — correções", () => {
+  it("inteiro grande sai com todos os algarismos", () => {
+    expect(formatNumber(123456789012345)).toBe("123456789012345");
+  });
+
+  it("notação científica sem zeros sobrando", () => {
+    expect(formatNumber(1e20)).toBe("1e+20");
+    expect(formatNumber(2.5e-12)).toBe("2.5e-12");
+  });
+});

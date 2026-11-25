@@ -22,33 +22,32 @@ background-removal tool and of swapping the video engine for an LGPL build.
 | --- | --- |
 | `react`, `react-dom`, `react-router-dom` | MIT |
 | `@ffmpeg/ffmpeg`, `@ffmpeg/util` | MIT |
-| `@cantoo/pdf-lib`, `@cantoo/fontkit`, `fflate`, `jspdf`, `jspdf-autotable` | MIT |
+| `@cantoo/pdf-lib`, `@cantoo/fontkit`, `fflate`, `jspdf` | MIT |
+| `svg2pdf.js` and its dependencies `cssesc`, `font-family-papandreou`, `specificity`, `svgpath` | MIT |
 | `docx` | MIT |
 | `fabric` | MIT |
-| `html2canvas` | MIT |
+| `html2canvas` (pulled in by `jspdf` as an optional dependency) | MIT |
 | `heic2any` | MIT |
 | `turndown` | MIT |
+| `marked` | MIT |
 | `qrcode` | MIT |
 | `js-yaml` | MIT |
 | `jszip` | MIT / GPL-3.0 (dual) |
 | `file-saver` | MIT |
 | `@tiptap/*` | MIT |
 | `@radix-ui/*`, `shadcn/ui` | MIT |
-| `tailwindcss`, `tailwindcss-animate`, `@tailwindcss/typography` | MIT |
+| `tailwindcss`, `tailwindcss-animate` | MIT |
 | `@tanstack/react-query` | MIT |
-| `react-hook-form`, `@hookform/resolvers` | MIT |
-| `zod` | MIT |
 | `sonner` | MIT |
 | `lucide-react` | ISC |
-| `date-fns` | MIT |
 | `class-variance-authority`, `clsx`, `tailwind-merge` | MIT |
 | `next-themes` | MIT |
-| `react-resizable-panels` | MIT |
 | `@upstash/redis` (server only) | MIT |
 | `unpdf`, `jimp` (server only) | MIT |
 | `mammoth` (server only) | BSD-2-Clause |
 | `pdfjs-dist` | Apache-2.0 |
 | `xlsx` (SheetJS) | Apache-2.0 |
+| `@jsquash/avif` (AVIF encoder, WebAssembly, loaded only when the browser cannot encode AVIF itself) and its dependency `wasm-feature-detect` | Apache-2.0 |
 | `dompurify` | MPL-2.0 OR Apache-2.0 |
 | `imagetracerjs` | Unlicense |
 

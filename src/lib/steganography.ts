@@ -66,11 +66,25 @@ export async function loadImageToCanvas(file: File): Promise<HTMLCanvasElement> 
   }
 }
 
+/**
+ * Só pixels opacos guardam dados. O canvas trabalha com cor pré-multiplicada
+ * pelo alfa: num pixel transparente ou semitransparente, o último bit de cada
+ * canal não sobrevive à ida e volta (no transparente, a cor inteira vira zero),
+ * e a mensagem escondida num PNG com transparência não voltava mais. O alfa
+ * não é alterado, então a decodificação encontra os mesmos pixels opacos.
+ * Em imagem toda opaca, a ordem dos bits é a mesma de antes.
+ */
+const opaque = (data: Uint8ClampedArray, i: number) => data[i + 3] === 255;
+
 /** Bytes disponíveis para payload total (incluindo magic+len+nonce+salt+header+ct). */
 export function capacityBytes(canvas: HTMLCanvasElement): number {
-  // 3 bits utilizáveis por pixel (R,G,B), ignoramos alfa para não alterar transparência.
-  const bits = canvas.width * canvas.height * 3;
-  return Math.floor(bits / 8);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return 0;
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  let pixels = 0;
+  for (let i = 0; i < data.length; i += 4) if (opaque(data, i)) pixels++;
+  // 3 bits por pixel (R, G, B); o alfa fica intacto.
+  return Math.floor((pixels * 3) / 8);
 }
 
 function buildPlain(payload: HiddenPayload): Uint8Array {
@@ -109,6 +123,7 @@ function writeBitsIntoImageData(img: ImageData, bytes: Uint8Array) {
   const totalBits = bytes.length * 8;
   let bit = 0;
   for (let i = 0; i < data.length && bit < totalBits; i += 4) {
+    if (!opaque(data, i)) continue;
     for (let c = 0; c < 3 && bit < totalBits; c++) {
       const byteIdx = bit >> 3;
       const bitInByte = 7 - (bit & 7); // MSB first
@@ -125,6 +140,7 @@ function readBitsFromImageData(img: ImageData, byteCount: number): Uint8Array {
   const out = new Uint8Array(byteCount);
   let bit = 0;
   for (let i = 0; i < data.length && bit < totalBits; i += 4) {
+    if (!opaque(data, i)) continue;
     for (let c = 0; c < 3 && bit < totalBits; c++) {
       const v = data[i + c] & 1;
       const byteIdx = bit >> 3;

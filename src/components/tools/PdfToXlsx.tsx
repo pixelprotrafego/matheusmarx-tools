@@ -1,92 +1,93 @@
 import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Upload, Download, Loader2, X, FileText, AlertTriangle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { saveAs } from "file-saver";
 import { useAdoptDroppedFile } from "./shared/dropped-file";
+import PdfPasswordPrompt from "./shared/PdfPasswordPrompt";
+import { usePdfPassword } from "./shared/use-pdf-password";
+import { bytesToBlob } from "@/lib/download";
 
 const PdfToXlsx = () => {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState("");
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [singleSheet, setSingleSheet] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pdfPassword = usePdfPassword();
+  const { catchPassword } = pdfPassword;
 
-  const processFile = useCallback(async (selectedFile: File) => {
+  const processFile = useCallback(async (selectedFile: File, opts: { password?: string; single: boolean }) => {
     setFile(selectedFile);
     setLoading(true);
-    setProgress(10);
+    setProgress(5);
+    setStatus("Lendo o arquivo...");
     setResultBlob(null);
+    setWarning(null);
     setError(null);
 
     try {
-      const { pdfjsLib } = await import("@/lib/pdfjs-setup");
-      setProgress(20);
-
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const totalPages = pdf.numPages;
-      setProgress(30);
-
-      const XLSX = await import("xlsx");
-      const wb = XLSX.utils.book_new();
-
-      for (let i = 1; i <= totalPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const lines: string[] = [];
-        let currentLine = "";
-        let lastY: number | null = null;
-
-        for (const item of textContent.items) {
-          if (!("str" in item)) continue;
-          const y = item.transform?.[5];
-          if (lastY !== null && y !== undefined && Math.abs(y - lastY) > 5) {
-            if (currentLine.trim()) lines.push(currentLine.trim());
-            currentLine = "";
-          }
-          currentLine += item.str + " ";
-          if (y !== undefined) lastY = y;
-        }
-        if (currentLine.trim()) lines.push(currentLine.trim());
-
-        const data = lines.map((line) => [line]);
-        const ws = XLSX.utils.aoa_to_sheet(data);
-        XLSX.utils.book_append_sheet(wb, ws, `Página ${i}`);
-
-        setProgress(30 + Math.round((i / totalPages) * 60));
+      // Tabelas viram células, e números viram números (moeda, porcentagem e
+      // data com o formato certo), no navegador.
+      const { pdfToXlsx } = await import("@/lib/pdf-to-xlsx");
+      const { bytes, pages, pagesWithoutText } = await pdfToXlsx(await selectedFile.arrayBuffer(), {
+        password: opts.password,
+        singleSheet: opts.single,
+        onProgress: (percent, message) => {
+          setProgress(percent);
+          setStatus(message);
+        },
+      });
+      setResultBlob(bytesToBlob(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+      if (pagesWithoutText > 0) {
+        setWarning(
+          pagesWithoutText === 1
+            ? "Uma página deste PDF é digitalizada (imagem, sem texto) e ficou de fora da planilha."
+            : `${pagesWithoutText} páginas deste PDF são digitalizadas (imagem, sem texto) e ficaram de fora da planilha.`,
+        );
       }
-
-      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-      const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      
-      setProgress(100);
-      setResultBlob(blob);
-      toast.success("PDF convertido para XLSX!");
+      toast.success(`Planilha gerada a partir de ${pages} página${pages > 1 ? "s" : ""}.`);
     } catch (err) {
+      if (catchPassword(err)) return;
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
       setError(msg);
       toast.error("Falha na conversão", { description: msg });
     } finally {
       setLoading(false);
+      setStatus("");
     }
-  }, []);
+  }, [catchPassword]);
 
-  useAdoptDroppedFile(processFile);
+  const startFile = useCallback((f: File) => {
+    pdfPassword.reset();
+    void processFile(f, { single: singleSheet });
+  }, [processFile, pdfPassword, singleSheet]);
+
+  useAdoptDroppedFile(startFile);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const f = e.dataTransfer.files[0];
-    if (f?.type === "application/pdf") processFile(f);
-  }, [processFile]);
+    if (f && (f.type === "application/pdf" || /\.pdf$/i.test(f.name))) startFile(f);
+  }, [startFile]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) processFile(f);
+    if (f) startFile(f);
+  };
+
+  const changeLayout = (single: boolean) => {
+    setSingleSheet(single);
+    if (file && !loading && !pdfPassword.request) void processFile(file, { password: pdfPassword.password, single });
   };
 
   const downloadResult = () => {
@@ -97,13 +98,22 @@ const PdfToXlsx = () => {
   const reset = () => {
     setFile(null);
     setResultBlob(null);
+    setWarning(null);
     setProgress(0);
     setError(null);
+    pdfPassword.reset();
     if (inputRef.current) inputRef.current.value = "";
   };
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Switch id="pdf-xlsx-single" checked={singleSheet} onCheckedChange={changeLayout} disabled={loading} />
+        <Label htmlFor="pdf-xlsx-single" className="cursor-pointer">
+          Todas as páginas numa planilha só (em vez de uma aba por página)
+        </Label>
+      </div>
+
       {!file ? (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -131,11 +141,18 @@ const PdfToXlsx = () => {
             </Button>
           </div>
 
+          {pdfPassword.request && !loading && (
+            <PdfPasswordPrompt
+              reason={pdfPassword.request}
+              onSubmit={(pw) => { pdfPassword.provide(pw); void processFile(file, { password: pw, single: singleSheet }); }}
+            />
+          )}
+
           {loading && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground">Extraindo texto e gerando XLSX...</span>
+                <span className="text-sm text-muted-foreground">{status || "Extraindo texto e gerando XLSX..."}</span>
               </div>
               <Progress value={progress} />
             </div>
@@ -145,7 +162,7 @@ const PdfToXlsx = () => {
             <div className="flex items-center gap-3 bg-destructive/10 text-destructive rounded-lg p-4">
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <p className="text-sm flex-1">{error}</p>
-              <Button variant="outline" size="sm" onClick={() => file && processFile(file)} className="gap-1 shrink-0">
+              <Button variant="outline" size="sm" onClick={() => processFile(file, { password: pdfPassword.password, single: singleSheet })} className="gap-1 shrink-0">
                 <RotateCcw className="w-3 h-3" /> Tentar novamente
               </Button>
             </div>
@@ -155,7 +172,10 @@ const PdfToXlsx = () => {
             <div className="bg-secondary/50 rounded-lg p-6 text-center space-y-4">
               <FileText className="w-12 h-12 mx-auto text-primary" />
               <p className="text-foreground font-heading">Conversão concluída!</p>
-              <p className="text-sm text-muted-foreground">Cada página do PDF virou uma aba na planilha.</p>
+              <p className="text-sm text-muted-foreground">
+                {singleSheet ? "Todas as páginas estão numa planilha só." : "Cada página do PDF virou uma aba na planilha."}
+              </p>
+              {warning && <p className="text-sm text-muted-foreground">{warning}</p>}
               <Button onClick={downloadResult} className="gap-2">
                 <Download className="w-4 h-4" />
                 Baixar XLSX

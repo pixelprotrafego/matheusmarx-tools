@@ -41,6 +41,8 @@ const PrazoProcessual = () => {
   const [suspenderRecesso, setSuspenderRecesso] = useState(true);
   const [incluirForenses, setIncluirForenses] = useState(true);
   const [incluirMoveis, setIncluirMoveis] = useState(true);
+  // Desligado: só vale na Justiça Federal e nos tribunais superiores.
+  const [incluirSemanaSanta, setIncluirSemanaSanta] = useState(false);
   const [feriados, setFeriados] = useState<FeriadoLocal[]>([]);
   const [novaData, setNovaData] = useState("");
   const [novoNome, setNovoNome] = useState("");
@@ -65,9 +67,10 @@ const PrazoProcessual = () => {
         suspenderRecesso,
         incluirForenses,
         incluirCarnavalCorpusChristi: incluirMoveis,
+        incluirSemanaSanta,
         personalizados: feriados,
       }),
-    [regime, dias, publicacao, suspenderRecesso, incluirForenses, incluirMoveis, feriados],
+    [regime, dias, publicacao, suspenderRecesso, incluirForenses, incluirMoveis, incluirSemanaSanta, feriados],
   );
 
   const pulados = resultado.trilha?.filter((d) => d.numero === null) ?? [];
@@ -129,7 +132,7 @@ const PrazoProcessual = () => {
         <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive">{resultado.erro}</div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
           <span className="text-sm">
             Recesso 20/12–20/01
@@ -152,6 +155,16 @@ const PrazoProcessual = () => {
             <span className="block text-xs text-muted-foreground">Sem expediente forense</span>
           </span>
           <Switch checked={incluirMoveis} onCheckedChange={setIncluirMoveis} />
+        </label>
+
+        <label className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+          <span className="text-sm">
+            Quarta e quinta-feira santas
+            <span className="block text-xs text-muted-foreground">
+              Justiça Federal e tribunais superiores (Lei 5.010/1966, art. 62, II)
+            </span>
+          </span>
+          <Switch checked={incluirSemanaSanta} onCheckedChange={setIncluirSemanaSanta} />
         </label>
       </div>
 

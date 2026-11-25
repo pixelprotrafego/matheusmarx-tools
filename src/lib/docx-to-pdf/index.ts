@@ -215,12 +215,27 @@ const waitImages = (root: ParentNode) =>
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 
 export async function docxToPdf(data: ArrayBuffer, options: DocxToPdfOptions = {}): Promise<DocxToPdfResult> {
-  const progress = options.onProgress ?? (() => {});
-  progress(0.05, "Lendo o documento...");
+  (options.onProgress ?? (() => {}))(0.05, "Lendo o documento...");
   const model = await readDocx(data);
+  return modelToPdf(model, options);
+}
 
+export interface ModelToPdfOptions extends DocxToPdfOptions {
+  /** Gerenciador de fontes já usado para medir o documento (reaproveita o que carregou). */
+  fonts?: FontManager;
+  /** Título gravado nas propriedades do PDF. */
+  title?: string;
+}
+
+/**
+ * Monta, pagina e grava um documento já no modelo. É o que o Word para PDF usa
+ * depois de ler o .docx, e o que o Excel para PDF usa depois de transformar as
+ * planilhas em tabelas.
+ */
+export async function modelToPdf(model: DocModel, options: ModelToPdfOptions = {}): Promise<DocxToPdfResult> {
+  const progress = options.onProgress ?? (() => {});
   progress(0.15, "Carregando as fontes...");
-  const fonts = new FontManager(options.fontBaseUrl);
+  const fonts = options.fonts ?? new FontManager(options.fontBaseUrl);
   const { fonts: needed, footnoteOrder, endnoteOrder } = survey(model);
   await Promise.all([
     fonts.load("symbols", false, false),
@@ -403,7 +418,9 @@ export async function docxToPdf(data: ArrayBuffer, options: DocxToPdfOptions = {
       const texts = fields.map((f) =>
         f.dataset.field === "NUMPAGES" ? String(total)
         : f.dataset.field === "SECTIONPAGES" ? String(sectionTotals.get(page.section) ?? total)
-        : String(page.number),
+        // Número no formato do próprio campo ou da seção: a parte pré-textual
+        // de um trabalho numerada em romanos saía em arábicos.
+        : formatNumber(page.number, f.dataset.format ?? page.numberFormat),
       );
       if (!partIds.has(el)) partIds.set(el, partIds.size);
       const key = `${partIds.get(el)}|${texts.join(",")}`;
@@ -489,6 +506,7 @@ export async function docxToPdf(data: ArrayBuffer, options: DocxToPdfOptions = {
 
     progress(0.7, "Gravando o PDF...");
     const bytes = await writePdf(drawn, fonts, ctx.images, {
+      title: options.title,
       onPage: (i) => progress(0.7 + (0.28 * (i + 1)) / drawn.length, `Gravando a página ${i + 1} de ${drawn.length}...`),
     });
     progress(1, "Pronto");

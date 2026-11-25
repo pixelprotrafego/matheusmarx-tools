@@ -6,7 +6,7 @@ import ConvertButton from "./shared/ConvertButton";
 import ErrorState from "./shared/ErrorState";
 import ProgressState from "./shared/ProgressState";
 import { fileToImage, drawToCanvas, canvasToBlob, supportsImageType } from "@/lib/canvas-utils";
-import { downloadBlob, downloadAsZip, replaceExt } from "@/lib/download";
+import { downloadBlob, downloadAsZip, replaceExt, bytesToBlob } from "@/lib/download";
 import { rasterizeSvg } from "@/lib/svg-utils";
 import { BATCH_LIMITS, checkBatch } from "@/lib/validate-file";
 import { ImageIcon } from "lucide-react";
@@ -40,12 +40,44 @@ async function loadAsImage(file: File, inputExt: string) {
   }
   if (inputExt === "heic" || /\.hei[cf]$/i.test(file.name)) {
     const heic2any = (await import("heic2any")).default;
-    const out = (await heic2any({ blob: file, toType: "image/png" })) as Blob;
-    const img = await fileToImage(out);
+    const out = await heic2any({ blob: file, toType: "image/png" });
+    // HEIC com várias imagens (sequência, Live Photo) volta como lista: vale a primeira.
+    const img = await fileToImage(Array.isArray(out) ? out[0] : out);
     return { canvas: drawToCanvas(img) };
   }
   const img = await fileToImage(file);
   return { canvas: drawToCanvas(img) };
+}
+
+const pixelsOf = (canvas: HTMLCanvasElement) =>
+  canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height);
+
+/**
+ * Grava o canvas no formato pedido. BMP, GIF e ICO têm codificador próprio
+ * (o navegador não grava nenhum deles); AVIF usa o do navegador quando há e,
+ * senão, um codificador em WebAssembly carregado só nessa hora.
+ */
+async function encodeCanvas(canvas: HTMLCanvasElement, ext: string, mime: string): Promise<Blob> {
+  const enc = await import("@/lib/image-encoders");
+  if (ext === "bmp") return bytesToBlob(enc.encodeBmp(pixelsOf(canvas)), "image/bmp");
+  if (ext === "gif") return bytesToBlob(enc.encodeGif(pixelsOf(canvas)), "image/gif");
+  if (ext === "ico") {
+    const largest = Math.max(canvas.width, canvas.height);
+    const sizes = enc.ICO_SIZES.filter((s) => s <= Math.max(48, largest));
+    const entries = await Promise.all(
+      sizes.map(async (size) => {
+        const square = enc.fitSquare(canvas, size);
+        const png = size > 64 ? new Uint8Array(await (await canvasToBlob(square, "image/png")).arrayBuffer()) : undefined;
+        return { size, pixels: pixelsOf(square), png };
+      }),
+    );
+    return bytesToBlob(enc.encodeIco(entries), "image/x-icon");
+  }
+  if (ext === "avif" && !(await supportsImageType("image/avif"))) {
+    const encode = (await import("@jsquash/avif/encode")).default;
+    return new Blob([await encode(pixelsOf(canvas), { quality: 75, speed: 6 })], { type: "image/avif" });
+  }
+  return canvasToBlob(canvas, mime, 0.92);
 }
 
 const UniversalImageConverter = ({
@@ -73,37 +105,36 @@ const UniversalImageConverter = ({
     if (batchErr) { toast.error(batchErr); setError(batchErr); return; }
     setLoading(true); setError(null); setProgress(0);
     try {
-      // For ICO produce 256x256 favicon-ish file via PNG embed
+      // JPEG e BMP não têm transparência: fundo branco, como nos editores.
       const needsBg = outputExt === "jpg" || outputExt === "jpeg" || outputExt === "jfif" || outputExt === "bmp";
       const bg = background ?? (needsBg ? "#ffffff" : undefined);
 
-      let effectiveMime = targetMime;
-      // Chromium não codifica BMP nem GIF via canvas.toBlob; AVIF depende do build.
-      // Se o navegador não suportar o MIME alvo, caímos para PNG com aviso ao usuário.
-      if (
-        (outputExt === "avif" || outputExt === "bmp" || outputExt === "gif") &&
-        !(await supportsImageType(targetMime))
-      ) {
-        toast.message(
-          `Seu navegador não suporta gerar ${outputExt.toUpperCase()} diretamente. Salvando como PNG.`,
-        );
-        effectiveMime = "image/png";
+      // WEBP é o único que pode faltar no navegador (Safari antigo) e não tem
+      // codificador próprio aqui: nesse caso o usuário é avisado.
+      let finalExt = outputExt;
+      let mime = targetMime;
+      if (outputExt === "webp" && !(await supportsImageType("image/webp"))) {
+        toast.message("Seu navegador não grava WEBP. Salvando como PNG.");
+        finalExt = "png";
+        mime = "image/png";
       }
 
       const results: { name: string; blob: Blob }[] = [];
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
-        const { canvas } = await loadAsImage(f, inputExt);
-
-        let outCanvas = canvas;
-        if (outputExt === "ico") {
-          outCanvas = drawToCanvas(await fileToImage(await canvasToBlob(canvas, "image/png")), 256, 256, bg);
-        } else if (bg) {
-          outCanvas = drawToCanvas(await fileToImage(await canvasToBlob(canvas, "image/png")), canvas.width, canvas.height, bg);
+        // JPEG para JPG ou JFIF é o mesmo formato: os bytes vão como estão,
+        // sem recomprimir (cada recompressão perde qualidade).
+        if (finalExt === "jpg" || finalExt === "jpeg" || finalExt === "jfif") {
+          const head = new Uint8Array(await f.slice(0, 3).arrayBuffer());
+          if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
+            results.push({ name: replaceExt(f.name, finalExt), blob: new Blob([await f.arrayBuffer()], { type: "image/jpeg" }) });
+            setProgress(Math.round(((i + 1) / files.length) * 100));
+            continue;
+          }
         }
-
-        const blob = await canvasToBlob(outCanvas, effectiveMime, 0.92);
-        const finalExt = effectiveMime === "image/png" && outputExt !== "png" ? "png" : outputExt;
+        const { canvas } = await loadAsImage(f, inputExt);
+        const outCanvas = bg ? drawToCanvas(canvas, canvas.width, canvas.height, bg) : canvas;
+        const blob = await encodeCanvas(outCanvas, finalExt, mime);
         results.push({ name: replaceExt(f.name, finalExt), blob });
         setProgress(Math.round(((i + 1) / files.length) * 100));
       }

@@ -5,45 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Upload, Download, Loader2 } from "lucide-react";
 import { saveAs } from "file-saver";
 import { toast } from "sonner";
-import jsPDF from "jspdf";
 import { useAdoptDroppedFile } from "./shared/dropped-file";
-
-async function svgToCanvas(file: File, scale: number) {
-  const text = await file.text();
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(text, "image/svg+xml");
-  const svg = doc.documentElement as unknown as SVGSVGElement;
-
-  let width = parseFloat(svg.getAttribute("width") || "0");
-  let height = parseFloat(svg.getAttribute("height") || "0");
-  const viewBox = svg.getAttribute("viewBox");
-  if ((!width || !height) && viewBox) {
-    const parts = viewBox.split(/\s+|,/).map(Number);
-    if (parts.length === 4) {
-      width = width || parts[2];
-      height = height || parts[3];
-    }
-  }
-  if (!width || !height) { width = 1024; height = 1024; }
-
-  const url = URL.createObjectURL(new Blob([text], { type: "image/svg+xml;charset=utf-8" }));
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = () => reject(new Error("Falha ao carregar o SVG."));
-      i.src = url;
-    });
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(width * scale);
-    canvas.height = Math.round(height * scale);
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return { canvas, width, height };
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
 
 const SvgToPdf = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -68,47 +30,10 @@ const SvgToPdf = () => {
     if (!file) return;
     setLoading(true);
     try {
-      const { canvas, width, height } = await svgToCanvas(file, 3);
-      const dataUrl = canvas.toDataURL("image/png");
-
-      let pdf: jsPDF;
-      if (pageSize === "fit") {
-        const ratio = width / height;
-        // Use mm — limit max dimension to ~600mm to keep PDF reasonable
-        const maxMm = 600;
-        let w = width;
-        let h = height;
-        const px2mm = 0.2645833333; // 1px = 0.2645mm at 96dpi
-        w = w * px2mm; h = h * px2mm;
-        if (w > maxMm || h > maxMm) {
-          if (w >= h) { h = (maxMm / w) * h; w = maxMm; }
-          else { w = (maxMm / h) * w; h = maxMm; }
-        }
-        pdf = new jsPDF({
-          orientation: ratio >= 1 ? "landscape" : "portrait",
-          unit: "mm",
-          format: [w, h],
-        });
-        pdf.addImage(dataUrl, "PNG", 0, 0, w, h);
-      } else {
-        pdf = new jsPDF({ orientation, unit: "mm", format: pageSize });
-        const pageW = pdf.internal.pageSize.getWidth();
-        const pageH = pdf.internal.pageSize.getHeight();
-        const margin = 10;
-        const availW = pageW - margin * 2;
-        const availH = pageH - margin * 2;
-        const ratio = width / height;
-        let drawW = availW;
-        let drawH = drawW / ratio;
-        if (drawH > availH) { drawH = availH; drawW = drawH * ratio; }
-        const x = (pageW - drawW) / 2;
-        const y = (pageH - drawH) / 2;
-        pdf.addImage(dataUrl, "PNG", x, y, drawW, drawH);
-      }
-
-      const blob = pdf.output("blob");
+      const { svgToPdf } = await import("@/lib/svg-to-pdf");
+      const { blob, vector } = await svgToPdf(await file.text(), { pageSize, orientation });
       saveAs(blob, file.name.replace(/\.svg$/i, "") + ".pdf");
-      toast.success("PDF gerado!");
+      toast.success(vector ? "PDF gerado, vetorial como o SVG!" : "PDF gerado (o SVG usa filtros ou HTML embutido, por isso foi como imagem em alta resolução).");
     } catch (e) {
       toast.error("Falha na conversão", { description: e instanceof Error ? e.message : String(e) });
     } finally {

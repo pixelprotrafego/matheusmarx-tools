@@ -110,7 +110,9 @@ export function calcularPrazo(opcoes: OpcoesPrazo): ResultadoPrazo {
   }
 
   const publicacao = dataDeChave(opcoes.publicacao);
-  if (Number.isNaN(publicacao.getTime())) {
+  // 30/02 passava no formato e virava 01/03 calado: a contagem partia de
+  // outro dia sem ninguém perceber.
+  if (Number.isNaN(publicacao.getTime()) || chaveData(publicacao) !== opcoes.publicacao) {
     return { ok: false, erro: "Data inválida." };
   }
 

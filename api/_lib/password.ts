@@ -26,11 +26,17 @@ export function generatePassword(opts: PassOpts): string {
   if (opts.symbols) alfabeto += SIMBOLOS;
 
   const limite = Math.floor(0x1_0000_0000 / alfabeto.length) * alfabeto.length;
-  const saida: string[] = [];
+  // Pelo menos um de cada tipo pedido: sem isso, com 16 caracteres, cerca de
+  // 13% das senhas saíam sem número. Sortear de novo a senha inteira até ter
+  // todos os tipos mantém o sorteio uniforme entre as senhas válidas.
+  const tipos = [MINUSCULAS, opts.upper && MAIUSCULAS, opts.digits && DIGITOS, opts.symbols && SIMBOLOS].filter(Boolean) as string[];
   const sorteio = new Uint32Array(1);
-  while (saida.length < tamanho) {
-    crypto.getRandomValues(sorteio);
-    if (sorteio[0] < limite) saida.push(alfabeto[sorteio[0] % alfabeto.length]);
+  for (;;) {
+    const saida: string[] = [];
+    while (saida.length < tamanho) {
+      crypto.getRandomValues(sorteio);
+      if (sorteio[0] < limite) saida.push(alfabeto[sorteio[0] % alfabeto.length]);
+    }
+    if (tipos.every((tipo) => saida.some((c) => tipo.includes(c)))) return saida.join("");
   }
-  return saida.join("");
 }

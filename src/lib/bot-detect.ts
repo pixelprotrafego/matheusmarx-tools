@@ -10,17 +10,28 @@ interface BotSignals {
   languages?: readonly string[];
 }
 
+/**
+ * Sinais fortes (automação declarada, navegador headless no user agent)
+ * bastam sozinhos. Os fracos só contam juntos, os três, e nunca no celular.
+ *
+ * Antes, dois sinais fracos bloqueavam: "sem `window.chrome` num user agent
+ * de Chrome" e "nenhum plugin". O navegador embutido dos apps no Android
+ * (Instagram, Facebook) costuma ter os dois, e quem chegava por um link ou
+ * anúncio nesses apps via "Acesso bloqueado" nas ferramentas pesadas.
+ */
 export function isLikelyBot(): boolean {
   if (typeof navigator === "undefined" || typeof window === "undefined") return false;
-  let score = 0;
   const nav = navigator as Navigator & BotSignals;
   const win = window as Window & { chrome?: unknown };
+  const ua = nav.userAgent ?? "";
 
-  if (nav.webdriver) score += 2;
-  if (!win.chrome && /Chrome/.test(nav.userAgent ?? "")) score += 1;
-  if (Array.isArray(nav.plugins) ? nav.plugins.length === 0 : nav.plugins?.length === 0) score += 1;
-  if (nav.languages?.length === 0) score += 1;
-  if (/HeadlessChrome|PhantomJS|Puppeteer|Playwright|Electron/i.test(nav.userAgent ?? "")) score += 3;
+  if (nav.webdriver) return true;
+  if (/HeadlessChrome|PhantomJS|Puppeteer|Playwright|Electron/i.test(ua)) return true;
 
-  return score >= 2;
+  if (/Mobile|Android|iPhone|iPad|; wv\)/i.test(ua)) return false;
+  let weak = 0;
+  if (!win.chrome && /Chrome/.test(ua)) weak++;
+  if (nav.plugins?.length === 0) weak++;
+  if (nav.languages?.length === 0) weak++;
+  return weak >= 3;
 }

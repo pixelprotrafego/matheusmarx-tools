@@ -51,18 +51,70 @@ export interface TabelaInss {
   faixas: FaixaInss[];
 }
 
+/**
+ * Redução mensal do imposto (Lei 15.270/2025, a partir de janeiro de 2026),
+ * calculada sobre o rendimento tributável bruto e limitada ao imposto da
+ * tabela: até `isencaoAte`, zera o imposto (abate até `limite`); daí até
+ * `ate`, abate `a - b × rendimento`, que chega a zero em `ate`.
+ */
+export interface ReducaoIrrf {
+  isencaoAte: number;
+  limite: number;
+  ate: number;
+  a: number;
+  b: number;
+}
+
 export interface TabelaIrrf {
   vigencia: string;
   faixas: FaixaIrrf[];
   porDependente: number;
+  /**
+   * Desconto simplificado mensal: substitui INSS e dependentes quando é maior
+   * que eles (a fonte pagadora aplica o que for mais favorável).
+   */
+  descontoSimplificado?: number;
+  reducao?: ReducaoIrrf;
 }
 
 /**
  * Valores de referência. **Confira antes de usar**: são a última tabela que
  * pôde ser embutida com segurança, não necessariamente a vigente hoje. A tela
  * mostra a vigência em destaque e deixa editar cada faixa.
+ *
+ * INSS: Portaria Interministerial MPS/MF nº 13, de 9/1/2026 (anexo II).
  */
 export const TABELA_INSS_PADRAO: TabelaInss = {
+  vigencia: "janeiro/2026",
+  faixas: [
+    { ate: 1621.0, aliquota: 0.075 },
+    { ate: 2902.84, aliquota: 0.09 },
+    { ate: 4354.27, aliquota: 0.12 },
+    { ate: 8475.55, aliquota: 0.14 },
+  ],
+};
+
+/**
+ * IRRF: tabela progressiva da Lei 15.191/2025 (a mesma desde maio de 2025),
+ * com a redução da Lei 15.270/2025 que vale desde janeiro de 2026. Valores
+ * conferidos na página "Tributação de 2026" da Receita Federal.
+ */
+export const TABELA_IRRF_PADRAO: TabelaIrrf = {
+  vigencia: "janeiro/2026",
+  faixas: [
+    { ate: 2428.8, aliquota: 0, deduzir: 0 },
+    { ate: 2826.65, aliquota: 0.075, deduzir: 182.16 },
+    { ate: 3751.05, aliquota: 0.15, deduzir: 394.16 },
+    { ate: 4664.68, aliquota: 0.225, deduzir: 675.49 },
+    { ate: Infinity, aliquota: 0.275, deduzir: 908.73 },
+  ],
+  porDependente: 189.59,
+  descontoSimplificado: 607.2,
+  reducao: { isencaoAte: 5000, limite: 312.89, ate: 7350, a: 978.62, b: 0.133145 },
+};
+
+/** Tabelas de 2025: INSS de janeiro (Portaria MPS/MF nº 6/2025) e IRRF de maio, sem a redução. */
+export const TABELA_INSS_2025: TabelaInss = {
   vigencia: "janeiro/2025",
   faixas: [
     { ate: 1518.0, aliquota: 0.075 },
@@ -72,17 +124,24 @@ export const TABELA_INSS_PADRAO: TabelaInss = {
   ],
 };
 
-export const TABELA_IRRF_PADRAO: TabelaIrrf = {
+export const TABELA_IRRF_2025: TabelaIrrf = {
   vigencia: "maio/2025",
-  faixas: [
-    { ate: 2428.8, aliquota: 0, deduzir: 0 },
-    { ate: 2826.65, aliquota: 0.075, deduzir: 182.16 },
-    { ate: 3751.05, aliquota: 0.15, deduzir: 394.16 },
-    { ate: 4664.68, aliquota: 0.225, deduzir: 675.49 },
-    { ate: Infinity, aliquota: 0.275, deduzir: 908.73 },
-  ],
+  faixas: TABELA_IRRF_PADRAO.faixas,
   porDependente: 189.59,
+  descontoSimplificado: 607.2,
 };
+
+/**
+ * Tabelas da data da rescisão (o acerto é pago em até 10 dias, na mesma
+ * competência). Uma rescisão de 2025 não leva a redução de 2026, e vice-versa.
+ * Antes de maio de 2025 valia outra tabela de IRRF, que não está embutida: a
+ * tela mostra a vigência para quem usa conferir.
+ */
+export function tabelasPara(data: string): { inss: TabelaInss; irrf: TabelaIrrf } {
+  return data >= "2026-01-01"
+    ? { inss: TABELA_INSS_PADRAO, irrf: TABELA_IRRF_PADRAO }
+    : { inss: TABELA_INSS_2025, irrf: TABELA_IRRF_2025 };
+}
 
 const arredondar = (valor: number) => Math.round((valor + Number.EPSILON) * 100) / 100;
 
@@ -105,16 +164,37 @@ export function calcularInss(base: number, tabela: TabelaInss = TABELA_INSS_PADR
   return arredondar(total);
 }
 
+/**
+ * IRRF de um rendimento.
+ *
+ * Duas regras que a versão anterior não tinha, e que por isso cobravam a mais:
+ * o desconto simplificado (vale o maior entre ele e INSS + dependentes) e a
+ * redução da Lei 15.270/2025, que zera o imposto até R$ 5.000 de rendimento e
+ * o diminui até R$ 7.350. No 13º (tributação exclusiva) o desconto
+ * simplificado não é aplicado: a orientação da Receita consultada o descreve só
+ * para a tabela mensal. A redução, essa sim, vale também para o 13º.
+ */
 export function calcularIrrf(
   base: number,
   dependentes: number,
   inssDescontado: number,
   tabela: TabelaIrrf = TABELA_IRRF_PADRAO,
+  opcoes: { simplificado?: boolean } = {},
 ): number {
-  const baseLiquida = base - inssDescontado - dependentes * tabela.porDependente;
+  const legais = inssDescontado + dependentes * tabela.porDependente;
+  const simplificado = opcoes.simplificado === false ? 0 : (tabela.descontoSimplificado ?? 0);
+  const baseLiquida = base - Math.max(legais, simplificado);
   if (baseLiquida <= 0) return 0;
   const faixa = tabela.faixas.find((f) => baseLiquida <= f.ate) ?? tabela.faixas[tabela.faixas.length - 1];
-  return arredondar(Math.max(0, baseLiquida * faixa.aliquota - faixa.deduzir));
+  const imposto = Math.max(0, baseLiquida * faixa.aliquota - faixa.deduzir);
+  return arredondar(Math.max(0, imposto - reducaoIrrf(base, imposto, tabela.reducao)));
+}
+
+/** Quanto a redução da Lei 15.270/2025 abate de um imposto já calculado. */
+export function reducaoIrrf(rendimento: number, imposto: number, r: ReducaoIrrf | undefined): number {
+  if (!r || rendimento > r.ate) return 0;
+  const bruta = rendimento <= r.isencaoAte ? r.limite : r.a - r.b * rendimento;
+  return Math.min(imposto, Math.max(0, bruta));
 }
 
 export interface EntradaRescisao {
@@ -235,11 +315,14 @@ export function calcularRescisao(
   const dataProjetada = indenizado ? somarDias(demissao, diasAviso) : demissao;
 
   // -------------------------------------------------------- saldo de salário
-  const diasNoMes = demissao.getDate();
+  // Mês comercial: o salário mensal paga 30 dias. Trabalhado o mês inteiro, o
+  // saldo é o salário cheio (antes, fevereiro inteiro pagava 28/30 e um mês
+  // de 31 dias pagava 31/30); mês incompleto conta os dias trabalhados.
+  const mesmoMes = admissao.getFullYear() === demissao.getFullYear() && admissao.getMonth() === demissao.getMonth();
+  const inicioNoMes = mesmoMes ? admissao.getDate() : 1;
+  const ultimoDiaDoMes = new Date(demissao.getFullYear(), demissao.getMonth() + 1, 0).getDate();
   const diasTrabalhadosNoMes =
-    admissao.getFullYear() === demissao.getFullYear() && admissao.getMonth() === demissao.getMonth()
-      ? demissao.getDate() - admissao.getDate() + 1
-      : diasNoMes;
+    inicioNoMes === 1 && demissao.getDate() === ultimoDiaDoMes ? 30 : Math.min(30, demissao.getDate() - inicioNoMes + 1);
   const saldoSalario = arredondar(diaria * diasTrabalhadosNoMes);
   verbas.push({
     chave: "saldo",
@@ -252,11 +335,14 @@ export function calcularRescisao(
   // ------------------------------------------------------------ aviso prévio
   let avisoIndenizado = 0;
   if (indenizado) {
-    avisoIndenizado = arredondar(diaria * diasAviso);
+    // No acordo, metade do valor do aviso cheio: com 33 dias, 16,5 dias, e
+    // não 16 (arredondar os dias para baixo tirava meio dia do valor).
+    const diasPagos = tipo === "acordo" ? diasAvisoCheio / 2 : diasAviso;
+    avisoIndenizado = arredondar(diaria * diasPagos);
     verbas.push({
       chave: "aviso",
       descricao: "Aviso prévio indenizado",
-      detalhe: `${diasAviso} dia(s) × ${moeda(diaria)}${tipo === "acordo" ? " (metade, art. 484-A)" : ""}`,
+      detalhe: `${String(diasPagos).replace(".", ",")} dia(s) × ${moeda(diaria)}${tipo === "acordo" ? ` (metade de ${diasAvisoCheio}, art. 484-A)` : ""}`,
       valor: avisoIndenizado,
       grupo: "provento",
     });
@@ -277,19 +363,32 @@ export function calcularRescisao(
 
   // ------------------------------------------------------------- 13º salário
   const temDireito13 = tipo !== "justa-causa";
-  let decimo = 0;
+  // Um 13º por ano civil alcançado. Quando o aviso indenizado leva o contrato
+  // para o ano seguinte (dispensa em 10/12 com 30 dias de aviso), o 13º do
+  // ano da dispensa vai até dezembro e o do ano novo conta à parte. Antes só o
+  // ano projetado contava, e o do ano da dispensa sumia.
+  const decimos: { ano: number; valor: number }[] = [];
   if (temDireito13) {
-    const inicioAno = new Date(dataProjetada.getFullYear(), 0, 1);
-    const de = admissao > inicioAno ? admissao : inicioAno;
-    const avos13 = Math.min(12, contarAvos(de, dataProjetada));
-    decimo = arredondar((remuneracao / 12) * avos13);
-    verbas.push({
-      chave: "decimo",
-      descricao: "13º salário proporcional",
-      detalhe: `${avos13}/12 avos`,
-      valor: decimo,
-      grupo: "provento",
-    });
+    const anos13 = dataProjetada.getFullYear() - demissao.getFullYear() + 1;
+    for (let k = 0; k < anos13; k++) {
+      const ano = demissao.getFullYear() + k;
+      const inicioAno = new Date(ano, 0, 1);
+      const fimAno = new Date(ano, 11, 31);
+      const de = admissao > inicioAno ? admissao : inicioAno;
+      const ate = dataProjetada < fimAno ? dataProjetada : fimAno;
+      const avos13 = Math.min(12, contarAvos(de, ate));
+      if (avos13 === 0 && anos13 > 1) continue;
+      const valor = arredondar((remuneracao / 12) * avos13);
+      decimos.push({ ano, valor });
+      verbas.push({
+        chave: k === 0 ? "decimo" : "decimo-projetado",
+        descricao: anos13 > 1 ? `13º salário proporcional de ${ano}` : "13º salário proporcional",
+        detalhe: `${avos13}/12 avos`,
+        valor,
+        grupo: "provento",
+      });
+    }
+    avisos.push("O 13º aparece bruto: desconte o adiantamento (1ª parcela) que já tiver sido pago no ano.");
   } else {
     avisos.push("Na justa causa não há 13º proporcional nem férias proporcionais (Súmula 171 do TST).");
   }
@@ -337,7 +436,8 @@ export function calcularRescisao(
 
   // -------------------------------------------------------------------- FGTS
   // 8% sobre as parcelas de natureza salarial da rescisão.
-  const baseFgts = saldoSalario + avisoIndenizado + decimo;
+  const decimo = decimos.reduce((s, d) => s + d.valor, 0);
+  const baseFgts = arredondar(saldoSalario + avisoIndenizado + decimo);
   const fgtsRescisao = arredondar(baseFgts * 0.08);
   verbas.push({
     chave: "fgts-mes",
@@ -380,16 +480,24 @@ export function calcularRescisao(
     });
   }
 
-  const inss13 = decimo > 0 ? calcularInss(decimo, tabelaInss) : 0;
-  if (inss13 > 0) {
-    verbas.push({
-      chave: "inss-13",
-      descricao: "INSS sobre o 13º salário",
-      detalhe: "cálculo separado, tributação exclusiva",
-      valor: -inss13,
-      grupo: "desconto",
-    });
-  }
+  // Cada 13º tem INSS e IRRF próprios (são competências diferentes).
+  const impostos13 = decimos.map(({ ano, valor }) => {
+    const inss = valor > 0 ? calcularInss(valor, tabelaInss) : 0;
+    const irrf = valor > 0 ? calcularIrrf(valor, entrada.dependentes, inss, tabelaIrrf, { simplificado: false }) : 0;
+    return { ano, inss, irrf };
+  });
+  const deAno = (ano: number) => (decimos.length > 1 ? ` de ${ano}` : "");
+  impostos13.forEach(({ ano, inss }, k) => {
+    if (inss > 0) {
+      verbas.push({
+        chave: k === 0 ? "inss-13" : "inss-13-projetado",
+        descricao: `INSS sobre o 13º salário${deAno(ano)}`,
+        detalhe: "cálculo separado, tributação exclusiva",
+        valor: -inss,
+        grupo: "desconto",
+      });
+    }
+  });
 
   const irrfSalario = calcularIrrf(saldoSalario, entrada.dependentes, inssSalario, tabelaIrrf);
   if (irrfSalario > 0) {
@@ -402,16 +510,17 @@ export function calcularRescisao(
     });
   }
 
-  const irrf13 = decimo > 0 ? calcularIrrf(decimo, entrada.dependentes, inss13, tabelaIrrf) : 0;
-  if (irrf13 > 0) {
-    verbas.push({
-      chave: "irrf-13",
-      descricao: "IRRF sobre o 13º salário",
-      detalhe: "tributação exclusiva na fonte",
-      valor: -irrf13,
-      grupo: "desconto",
-    });
-  }
+  impostos13.forEach(({ ano, irrf }, k) => {
+    if (irrf > 0) {
+      verbas.push({
+        chave: k === 0 ? "irrf-13" : "irrf-13-projetado",
+        descricao: `IRRF sobre o 13º salário${deAno(ano)}`,
+        detalhe: "tributação exclusiva na fonte",
+        valor: -irrf,
+        grupo: "desconto",
+      });
+    }
+  });
 
   avisos.push(
     "Aviso prévio indenizado e férias indenizadas com o terço não sofrem INSS nem IRRF (Súmula 386 do STJ).",

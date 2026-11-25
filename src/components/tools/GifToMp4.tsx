@@ -6,6 +6,7 @@ import ConvertButton from "./shared/ConvertButton";
 import ErrorState from "./shared/ErrorState";
 import ProgressState from "./shared/ProgressState";
 import { runFFmpeg } from "@/lib/ffmpeg-runner";
+import { EVEN_SIZE, faststart, h264Args } from "@/lib/media-presets";
 import { downloadBlob, replaceExt } from "@/lib/download";
 import { FileVideo } from "lucide-react";
 import { useAdoptDroppedFile } from "./shared/dropped-file";
@@ -25,8 +26,13 @@ const GifToMp4 = () => {
     try {
       const blob = await runFFmpeg({
         inputs: [{ name: "in.gif", data: file }],
-        args: ["-i", "in.gif", "-movflags", "+faststart", "-pix_fmt", "yuv420p",
-               "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "out.mp4"],
+        // O MP4 não tem transparência: o fundo transparente do GIF vira
+        // branco, como numa página. Sem isso, aparecia a cor que o arquivo
+        // guarda por baixo da transparência, que muda de um GIF para outro
+        // (preto, magenta...), e não é a que a pessoa vê.
+        args: ["-i", "in.gif",
+               "-vf", `format=rgba,split[a][b];[a]drawbox=c=white:t=fill:replace=1[fundo];[fundo][b]overlay,${EVEN_SIZE}`,
+               ...h264Args(18), ...faststart("mp4"), "out.mp4"],
         output: "out.mp4",
         onProgress: setProgress,
         onStatus: setStatus,

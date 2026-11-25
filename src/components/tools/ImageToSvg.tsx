@@ -9,6 +9,11 @@ import JSZip from "jszip";
 import { toast } from "sonner";
 import { useAdoptDroppedFile } from "./shared/dropped-file";
 
+const svgName = (file: File) => `${file.name.replace(/\.[^.]+$/, "") || "imagem"}.svg`;
+
+/** Formatos que o navegador decodifica (HEIC, por exemplo, não). */
+const RASTER = /^image\/(jpeg|png|webp|gif|bmp|avif)$/;
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -27,7 +32,7 @@ async function imageToSvgEmbed(file: File): Promise<{ name: string; svg: string 
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <image width="${width}" height="${height}" xlink:href="${dataUrl}" href="${dataUrl}"/>
 </svg>`;
-  return { name: file.name.replace(/\.(jpe?g|png|webp|gif|bmp)$/i, "") + ".svg", svg };
+  return { name: svgName(file), svg };
 }
 
 /** Superfície usada do imagetracerjs, que não publica tipos próprios. */
@@ -44,9 +49,13 @@ async function imageToSvgVector(file: File, numColors: number): Promise<{ name: 
   const ImageTracer = ((mod as { default?: unknown }).default ?? mod) as ImageTracerApi;
   const dataUrl = await fileToDataUrl(file);
   const svg: string = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Tempo esgotado na vetorização")), 60000);
     ImageTracer.imageToSVG(
       dataUrl,
-      (svgStr: string) => resolve(svgStr),
+      (svgStr: string) => {
+        clearTimeout(timer);
+        resolve(svgStr);
+      },
       {
         numberofcolors: numColors,
         ltres: 1,
@@ -58,9 +67,8 @@ async function imageToSvgVector(file: File, numColors: number): Promise<{ name: 
         blurradius: 0,
       }
     );
-    setTimeout(() => reject(new Error("Tempo esgotado na vetorização")), 60000);
   });
-  return { name: file.name.replace(/\.(jpe?g|png|webp|gif|bmp)$/i, "") + ".svg", svg };
+  return { name: svgName(file), svg };
 }
 
 const ImageToSvg = () => {
@@ -72,7 +80,7 @@ const ImageToSvg = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = (list: FileList | File[]) => {
-    const valid = Array.from(list).filter((f) => /^image\//.test(f.type) && !/svg/i.test(f.type));
+    const valid = Array.from(list).filter((f) => RASTER.test(f.type));
     if (!valid.length) {
       toast.error("Selecione imagens raster (JPG, PNG, WEBP).");
       return;
@@ -94,9 +102,14 @@ const ImageToSvg = () => {
         saveAs(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }), name);
       } else {
         const zip = new JSZip();
+        // "logo.png" e "logo.jpg" dariam os dois "logo.svg", e um apagaria o outro.
+        const used = new Set<string>();
         for (const f of files) {
           const { name, svg } = await run(f);
-          zip.file(name, svg);
+          let unique = name;
+          for (let n = 2; used.has(unique.toLowerCase()); n++) unique = name.replace(/\.svg$/, ` (${n}).svg`);
+          used.add(unique.toLowerCase());
+          zip.file(unique, svg);
         }
         const blob = await zip.generateAsync({ type: "blob" });
         saveAs(blob, "imagens-svg.zip");
@@ -126,7 +139,7 @@ const ImageToSvg = () => {
         <input
           ref={inputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+          accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/avif"
           multiple
           onChange={(e) => e.target.files && handleFiles(e.target.files)}
           className="hidden"

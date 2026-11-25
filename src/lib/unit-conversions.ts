@@ -41,7 +41,7 @@ export const CATEGORIES: Category[] = [
       { id: "g", label: "Grama (g)", factor: 0.001 },
       { id: "kg", label: "Quilograma (kg)", factor: 1 },
       { id: "t", label: "Tonelada (t)", factor: 1000 },
-      { id: "oz", label: "Onça (oz)", factor: 0.0283495231 },
+      { id: "oz", label: "Onça (oz)", factor: 0.028349523125 }, // 1/16 lb, exato
       { id: "lb", label: "Libra (lb)", factor: 0.45359237 },
       { id: "st", label: "Stone (st)", factor: 6.35029318 },
     ],
@@ -60,7 +60,7 @@ export const CATEGORIES: Category[] = [
       { id: "mps", label: "Metros/segundo (m/s)", factor: 1 },
       { id: "kmh", label: "Quilômetros/hora (km/h)", factor: 1 / 3.6 },
       { id: "mph", label: "Milhas/hora (mph)", factor: 0.44704 },
-      { id: "kn", label: "Nós (kn)", factor: 0.514444 },
+      { id: "kn", label: "Nós (kn)", factor: 1852 / 3600 }, // 1 milha náutica por hora, exato
       { id: "fps", label: "Pés/segundo (ft/s)", factor: 0.3048 },
     ],
   },
@@ -70,9 +70,9 @@ export const CATEGORIES: Category[] = [
       { id: "ml", label: "Mililitro (ml)", factor: 0.001 },
       { id: "l", label: "Litro (l)", factor: 1 },
       { id: "m3", label: "Metro cúbico (m³)", factor: 1000 },
-      { id: "galus", label: "Galão US (gal)", factor: 3.78541 },
+      { id: "galus", label: "Galão US (gal)", factor: 3.785411784 }, // 231 in³, exato
       { id: "galuk", label: "Galão UK (gal)", factor: 4.54609 },
-      { id: "floz", label: "Onça fluida (fl oz)", factor: 0.0295735 },
+      { id: "floz", label: "Onça fluida (fl oz)", factor: 0.0295735295625 }, // 1/128 gal US, exato
       { id: "cup", label: "Xícara (cup)", factor: 0.24 },
     ],
   },
@@ -135,7 +135,7 @@ export const CATEGORIES: Category[] = [
       { id: "kcal", label: "Quilocaloria (kcal)", factor: 4184 },
       { id: "Wh", label: "Watt-hora (Wh)", factor: 3600 },
       { id: "kWh", label: "Quilowatt-hora (kWh)", factor: 3.6e6 },
-      { id: "BTU", label: "BTU", factor: 1055.06 },
+      { id: "BTU", label: "BTU", factor: 1055.05585262 }, // BTU internacional
     ],
   },
   {
@@ -177,6 +177,8 @@ export function formatConverted(n: number): string {
   if (!Number.isFinite(n)) return "—";
   if (n === 0) return "0";
   const abs = Math.abs(n);
+  // Inteiro grande sai inteiro: 1 TiB são 1099511627776 bytes, não 1.099512e+12.
+  if (Number.isInteger(n) && abs < 1e15) return String(n);
   if (abs >= 1e12 || abs < 1e-6) return n.toExponential(6);
   return parseFloat(n.toPrecision(10)).toString();
 }

@@ -27,10 +27,9 @@ const AudioExtractor = () => {
       const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
       const inputName = `input.${ext}`;
       const outputName = `output.${format}`;
-      const args = getFFmpegArgs(ext, format);
       const blob = await runFFmpeg({
         inputs: [{ name: inputName, data: file }],
-        args,
+        args: (info) => getFFmpegArgs(ext, format, {}, info),
         output: outputName,
         onProgress: setProgress,
         onStatus: setStatus,

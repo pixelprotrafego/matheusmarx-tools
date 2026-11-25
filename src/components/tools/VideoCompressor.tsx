@@ -8,6 +8,7 @@ import ProgressState from "./shared/ProgressState";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { runFFmpeg } from "@/lib/ffmpeg-runner";
+import { EVEN_SIZE, faststart, h264Args, mapStreams } from "@/lib/media-presets";
 import { downloadBlob, replaceExt } from "@/lib/download";
 import { formatReset } from "@/lib/rate-limit";
 import { guard, guardMessage } from "@/lib/abuse-guard";
@@ -38,15 +39,19 @@ const VideoCompressor = () => {
     try {
       const blob = await runFFmpeg({
         inputs: [{ name: "in.mp4", data: file }],
-        args: ["-i", "in.mp4", "-c:v", "libx264", "-crf", String(PRESETS[preset].crf),
-               "-preset", "medium", "-c:a", "aac", "-b:a", "128k", "out.mp4"],
+        args: (info) => ["-i", "in.mp4", ...mapStreams(info, "mp4"), ...h264Args(PRESETS[preset].crf, "medium"),
+               "-vf", EVEN_SIZE, "-c:a", "aac", "-b:a", "128k", ...faststart("mp4"), "out.mp4"],
         output: "out.mp4",
         onProgress: setProgress,
         onStatus: setStatus,
       });
       downloadBlob(new Blob([await blob.arrayBuffer()], { type: "video/mp4" }),
         replaceExt(file.name, "mp4").replace(/\.mp4$/, ".compressed.mp4"));
-      toast.success("Vídeo comprimido!");
+      if (blob.size >= file.size) {
+        toast.warning("O vídeo já estava bem comprimido: o resultado não ficou menor.", {
+          description: "Tente a qualidade baixa, ou mantenha o arquivo original.",
+        });
+      } else toast.success(`Vídeo comprimido: ${Math.round((1 - blob.size / file.size) * 100)}% menor.`);
       setFile(null);
     } catch (e) { setError(e instanceof Error ? e.message : "Erro"); }
     finally { setLoading(false); }

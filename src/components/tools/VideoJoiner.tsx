@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getFFmpeg, resetFFmpeg } from "@/lib/ffmpeg";
+import { probeMedia, type MediaInfo } from "@/lib/ffmpeg-runner";
+import { canJoinByCopy, faststart, joinArgs } from "@/lib/media-presets";
 import { BATCH_LIMITS, checkBatch } from "@/lib/validate-file";
 
 const VideoJoiner = () => {
@@ -34,7 +36,10 @@ const VideoJoiner = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const addFiles = useCallback((list: FileList | File[]) => {
-    const valid = Array.from(list).filter((f) => f.type.startsWith("video/"));
+    // Pela extensão também: o Windows não informa o tipo de MKV, TS e outros.
+    const valid = Array.from(list).filter(
+      (f) => f.type.startsWith("video/") || /\.(mp4|m4v|mov|mkv|webm|avi|ts|mts|3gp|flv|wmv)$/i.test(f.name),
+    );
     if (valid.length === 0) {
       toast.error("Selecione arquivos de vídeo");
       return;
@@ -93,6 +98,16 @@ const VideoJoiner = () => {
         names.push(name);
       }
 
+      setStatusText("Analisando vídeos...");
+      const infos: MediaInfo[] = [];
+      for (const n of names) infos.push(await probeMedia(ffmpeg, n));
+      if (effectiveFast && !canJoinByCopy(infos)) {
+        // Colar vídeos diferentes sem recodificar sai sem erro, mas o arquivo
+        // trava ou perde a imagem a partir do segundo trecho.
+        toast.message("Os vídeos têm formatos diferentes — usando o modo seguro automaticamente.");
+        effectiveFast = false;
+      }
+
       let exitCode: number;
       let outName: string;
 
@@ -106,39 +121,14 @@ const VideoJoiner = () => {
           "-safe", "0",
           "-i", "list.txt",
           "-c", "copy",
+          ...faststart(allExts[0]),
           outName,
         ]);
         try { await ffmpeg.deleteFile("list.txt"); } catch { /* já removido */ }
       } else {
         setStatusText("Concatenando e re-encodando (modo seguro)...");
-        const args: string[] = [];
-        names.forEach((n) => {
-          args.push("-i", n);
-        });
-        // normalize to 1920x1080 max, keep aspect, pad if needed; SAR=1
-        const filter = files
-          .map(
-            (_, i) =>
-              `[${i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v${i}];[${i}:a]aresample=async=1:first_pts=0[a${i}]`
-          )
-          .join(";");
-        const concatInputs = files
-          .map((_, i) => `[v${i}][a${i}]`)
-          .join("");
-        const fullFilter = `${filter};${concatInputs}concat=n=${files.length}:v=1:a=1[v][a]`;
-        args.push(
-          "-filter_complex", fullFilter,
-          "-map", "[v]",
-          "-map", "[a]",
-          "-c:v", "libx264",
-          "-preset", "veryfast",
-          "-crf", "23",
-          "-c:a", "aac",
-          "-b:a", "192k",
-          "output.mp4"
-        );
-        exitCode = await ffmpeg.exec(args);
         outName = "output.mp4";
+        exitCode = await ffmpeg.exec(joinArgs(names.map((name, i) => ({ name, info: infos[i] })), outName));
       }
 
       if (exitCode !== 0) {
@@ -221,7 +211,7 @@ const VideoJoiner = () => {
         <input
           ref={inputRef}
           type="file"
-          accept="video/*"
+          accept="video/*,.mkv,.ts,.mts,.m4v,.flv,.wmv,.3gp"
           multiple
           onChange={(e) => e.target.files && addFiles(e.target.files)}
           className="hidden"

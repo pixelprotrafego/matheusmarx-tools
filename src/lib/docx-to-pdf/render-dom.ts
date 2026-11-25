@@ -277,6 +277,7 @@ function renderInlines(ctx: RenderContext, p: Paragraph, inner: HTMLElement, wid
         const span = el("span", "run field");
         styleRun(ctx, span, inline.props, p);
         span.dataset.field = inline.field;
+        if (inline.format) span.dataset.format = inline.format;
         span.textContent = inline.fallback.trim() || "1";
         inner.appendChild(span);
         break;
@@ -388,8 +389,8 @@ export function renderParagraph(ctx: RenderContext, p: Paragraph, previous: Bloc
   inner.style.marginRight = `${p.props.indRight}pt`;
   inner.style.textIndent = `${p.props.indFirst}pt`;
   inner.style.textAlign = p.props.align === "justify" ? "justify" : p.props.align;
-  inner.style.whiteSpace = "pre-wrap";
-  inner.style.overflowWrap = "break-word";
+  inner.style.whiteSpace = p.props.noWrap ? "pre" : "pre-wrap";
+  inner.style.overflowWrap = p.props.noWrap ? "normal" : "break-word";
   if (p.props.shading) inner.dataset.bg = p.props.shading;
   const { top, bottom, left, right } = p.props.borders;
   if (top || bottom || left || right) {
@@ -530,6 +531,7 @@ export function renderTable(ctx: RenderContext, t: Table, availableWidth: number
     const tr = el("tr");
     if (row.header) tr.dataset.header = "1";
     if (row.cantSplit) tr.dataset.cantSplit = "1";
+    if (row.breakBefore) tr.dataset.breakBefore = "1";
     // Altura da linha (medido no Word): na "pelo menos", a altura é a do
     // conteúdo e as margens de cima e de baixo da célula somam-se a ela; na
     // "exata", a altura já inclui as margens.
@@ -555,10 +557,14 @@ export function renderTable(ctx: RenderContext, t: Table, availableWidth: number
       const m = cell.margins;
       td.style.padding = `${m.top}pt ${m.right}pt ${m.bottom}pt ${m.left}pt`;
       td.style.verticalAlign = cell.vAlign === "center" ? "middle" : cell.vAlign;
-      td.style.borderTop = borderCss(cell.borders.top);
-      td.style.borderBottom = borderCss(cell.borders.bottom);
-      td.style.borderLeft = borderCss(cell.borders.left);
-      td.style.borderRight = borderCss(cell.borders.right);
+      if (t.gridBorders) {
+        td.dataset.edges = JSON.stringify(cell.borders);
+      } else {
+        td.style.borderTop = borderCss(cell.borders.top);
+        td.style.borderBottom = borderCss(cell.borders.bottom);
+        td.style.borderLeft = borderCss(cell.borders.left);
+        td.style.borderRight = borderCss(cell.borders.right);
+      }
       if (cell.shading) td.dataset.bg = cell.shading;
       if (row.heightRule === "exact" && row.height) {
         td.style.height = `${Math.max(0, row.height - m.top - m.bottom)}pt`;
@@ -569,8 +575,28 @@ export function renderTable(ctx: RenderContext, t: Table, availableWidth: number
         ? (cell.width ?? (total * cell.span) / Math.max(1, t.grid.length)) - m.left - m.right
         : t.grid.slice(start, start + cell.span).reduce((a, b) => a + b, 0) - m.left - m.right;
       const content = el("div", "cell");
-      renderBlocks(ctx, cell.blocks.length ? cell.blocks : [], content, Math.max(4, cellWidth));
-      td.appendChild(content);
+      let contentWidth = Math.max(4, cellWidth);
+      let holder: HTMLElement = content;
+      if (cell.overflow) {
+        // Caixa alargada sobre as vizinhas vazias e cortada na borda dela; ou,
+        // numa mesclagem partida entre páginas, a mesclagem inteira cortada na
+        // parte que está nesta página.
+        contentWidth += cell.overflow.left + cell.overflow.right;
+        content.style.width = `${contentWidth}pt`;
+        content.style.marginLeft = `${-cell.overflow.left}pt`;
+        if (cell.overflow.clipToCell) {
+          holder = el("div");
+          holder.style.width = `${Math.max(1, cellWidth)}pt`;
+          holder.style.overflow = "hidden";
+          holder.dataset.clip = "1";
+          holder.appendChild(content);
+        } else {
+          content.style.overflow = "hidden";
+          content.dataset.clip = "1";
+        }
+      }
+      renderBlocks(ctx, cell.blocks.length ? cell.blocks : [], content, contentWidth);
+      td.appendChild(holder);
       tr.appendChild(td);
     }
     tbody.appendChild(tr);

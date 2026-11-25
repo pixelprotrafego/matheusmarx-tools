@@ -270,3 +270,14 @@ describe("readDocx", () => {
     });
   });
 });
+
+describe("formato do número de página", () => {
+  it("lê o formato pedido no campo PAGE", async () => {
+    const { fieldFormat } = await import("@/lib/docx-to-pdf/parse");
+    expect(fieldFormat(" PAGE \\* roman \\* MERGEFORMAT ")).toBe("lowerRoman");
+    expect(fieldFormat("PAGE \\* ROMAN")).toBe("upperRoman");
+    expect(fieldFormat("PAGE \\* alphabetic")).toBe("lowerLetter");
+    expect(fieldFormat("PAGE \\* MERGEFORMAT")).toBeUndefined();
+    expect(fieldFormat("PAGE")).toBeUndefined();
+  });
+});

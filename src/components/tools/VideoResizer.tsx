@@ -8,6 +8,7 @@ import ProgressState from "./shared/ProgressState";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { runFFmpeg } from "@/lib/ffmpeg-runner";
+import { faststart, h264Args, mapStreams } from "@/lib/media-presets";
 import { downloadBlob, replaceExt } from "@/lib/download";
 import { formatReset } from "@/lib/rate-limit";
 import { guard, guardMessage } from "@/lib/abuse-guard";
@@ -35,8 +36,11 @@ const VideoResizer = () => {
       const h = RES[res];
       const blob = await runFFmpeg({
         inputs: [{ name: "in.mp4", data: file }],
-        args: ["-i", "in.mp4", "-vf", `scale=-2:${h}`, "-c:v", "libx264", "-crf", "23",
-               "-preset", "fast", "-c:a", "aac", "-b:a", "128k", "out.mp4"],
+        // "720p" é o lado menor: 1280x720 deitado, 720x1280 em pé. Vídeo menor
+        // que o alvo fica do tamanho que tem (ampliar só borraria).
+        args: (info) => ["-i", "in.mp4", ...mapStreams(info, "mp4"),
+               "-vf", `scale=w='if(gte(iw,ih),-2,trunc(min(${h},iw)/2)*2)':h='if(gte(iw,ih),trunc(min(${h},ih)/2)*2,-2)':flags=lanczos`,
+               ...h264Args(20), "-c:a", "aac", "-b:a", "128k", ...faststart("mp4"), "out.mp4"],
         output: "out.mp4",
         onProgress: setProgress,
         onStatus: setStatus,

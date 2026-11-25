@@ -231,7 +231,7 @@ class Reader {
             if (instr === "PAGE" || instr === "NUMPAGES" || instr === "SECTIONPAGES") {
               const props = applyRun([...baseRun, readRun(this.styles.theme, path(c, "r", "rPr"))]);
               const fallback = descendants(c, "t").map((t) => t.textContent ?? "").join("");
-              out.push({ kind: "field", field: instr, props, fallback });
+              out.push({ kind: "field", field: instr, props, fallback, format: fieldFormat(attr(c, "instr") ?? "") });
             } else {
               visit(c, currentLink);
             }
@@ -296,7 +296,7 @@ class Reader {
             f.result = true;
             const code = f.instr.trim().split(/\s+/)[0]?.toUpperCase() ?? "";
             if (code === "PAGE" || code === "NUMPAGES" || code === "SECTIONPAGES") {
-              f.field = { kind: "field", field: code, props, fallback: "" };
+              f.field = { kind: "field", field: code, props, fallback: "", format: fieldFormat(f.instr) };
               out.push(f.field);
             }
           } else if (type === "end") fieldStack.pop();
@@ -818,6 +818,7 @@ function sectionProps(el: Element | null, previous: SectionProps | null): Omit<S
     type: type === "continuous" ? "continuous" : type === "evenPage" ? "evenPage" : type === "oddPage" ? "oddPage" : type === "nextColumn" ? "nextColumn" : "nextPage",
     titlePage: onOff(el, "titlePg") === true,
     pageNumberStart: num(kid(el, "pgNumType"), "start"),
+    pageNumberFormat: attr(kid(el, "pgNumType"), "fmt") ?? null,
     headerRefs,
     footerRefs,
   };
@@ -958,4 +959,20 @@ export async function readDocx(data: ArrayBuffer): Promise<DocModel> {
   }
 
   return { sections, footnotes, endnotes, evenAndOddHeaders, defaultTab, compatMode, normalRun: normal.props.markProps };
+}
+
+/**
+ * Formato pedido na instrução do campo: `PAGE \* roman` escreve "iv",
+ * `\* ROMAN` "IV", `\* alphabetic` "d". MERGEFORMAT e afins não mudam o número.
+ */
+export function fieldFormat(instr: string): string | undefined {
+  for (const m of instr.matchAll(/\\\*\s*([A-Za-z]+)/g)) {
+    const sw = m[1];
+    if (sw === "roman") return "lowerRoman";
+    if (sw === "ROMAN" || sw === "Roman") return "upperRoman";
+    if (sw === "alphabetic") return "lowerLetter";
+    if (sw === "ALPHABETIC" || sw === "Alphabetic") return "upperLetter";
+    if (/^arabic$/i.test(sw)) return "decimal";
+  }
+  return undefined;
 }

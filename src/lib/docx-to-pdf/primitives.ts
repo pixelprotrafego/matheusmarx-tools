@@ -138,6 +138,33 @@ function borderLines(out: Prim[], rect: DOMRect, style: CSSStyleDeclaration, ox:
   side("Right", [x1, y0], [x1, y1]);
 }
 
+type Edge = { width: number; color: string; style: string } | undefined;
+
+/** Bordas centradas nas linhas da grade (as da célula de planilha). */
+function gridEdges(out: Prim[], rect: DOMRect, edges: { top?: Edge; right?: Edge; bottom?: Edge; left?: Edge }, ox: number, oy: number) {
+  const x0 = (rect.left - ox) * PX;
+  const y0 = (rect.top - oy) * PX;
+  const x1 = (rect.right - ox) * PX;
+  const y1 = (rect.bottom - oy) * PX;
+  const line = (e: Edge, a: [number, number], b: [number, number], vertical: boolean) => {
+    if (!e || e.width <= 0) return;
+    const dash = e.style === "dashed" ? [e.width * 3, e.width * 2] : e.style === "dotted" ? [e.width, e.width] : undefined;
+    if (e.style === "double") {
+      const third = e.width / 3;
+      for (const s of [-third, third]) {
+        const [dx, dy] = vertical ? [s, 0] : [0, s];
+        out.push({ kind: "line", x1: a[0] + dx, y1: a[1] + dy, x2: b[0] + dx, y2: b[1] + dy, width: third, color: e.color });
+      }
+      return;
+    }
+    out.push({ kind: "line", x1: a[0], y1: a[1], x2: b[0], y2: b[1], width: e.width, color: e.color, dash });
+  };
+  line(edges.top, [x0, y0], [x1, y0], false);
+  line(edges.bottom, [x0, y1], [x1, y1], false);
+  line(edges.left, [x0, y0], [x0, y1], true);
+  line(edges.right, [x1, y0], [x1, y1], true);
+}
+
 /** Primitivas de tudo o que está dentro de `root`. */
 export function collectPrims(root: HTMLElement, glyphs: GlyphCheck): Prim[] {
   const origin = root.getBoundingClientRect();
@@ -152,6 +179,20 @@ export function collectPrims(root: HTMLElement, glyphs: GlyphCheck): Prim[] {
 
   const toRect = (r: DOMRect) => ({ x: (r.left - ox) * PX, y: (r.top - oy) * PX, w: r.width * PX, h: r.height * PX });
 
+  // Caixas que cortam o que passa delas (texto de célula de planilha).
+  const clipCache = new Map<Element, { left: number; right: number }>();
+  const clipOf = (node: Element): { left: number; right: number } | null => {
+    const box = node.closest('[data-clip="1"]');
+    if (!box) return null;
+    let c = clipCache.get(box);
+    if (!c) {
+      const r = box.getBoundingClientRect();
+      c = { left: (r.left - ox) * PX, right: (r.right - ox) * PX };
+      clipCache.set(box, c);
+    }
+    return c;
+  };
+
   // A própria raiz conta: um objeto flutuante pode ser só uma imagem ou caixa.
   for (const element of [root, ...Array.from(root.querySelectorAll<HTMLElement>("*"))]) {
     const bg = element.dataset.bg;
@@ -159,7 +200,9 @@ export function collectPrims(root: HTMLElement, glyphs: GlyphCheck): Prim[] {
       const rects = element.tagName === "SPAN" ? Array.from(element.getClientRects()) : [element.getBoundingClientRect()];
       for (const r of rects) backgrounds.push({ kind: "rect", ...toRect(r), color: bg });
     }
-    if (element.tagName === "TD" || element.dataset.borders === "1") {
+    if (element.dataset.edges) {
+      gridEdges(borders, element.getBoundingClientRect(), JSON.parse(element.dataset.edges), ox, oy);
+    } else if (element.tagName === "TD" || element.dataset.borders === "1") {
       borderLines(borders, element.getBoundingClientRect(), getComputedStyle(element), ox, oy, element.tagName === "TD");
     }
     if (element.tagName === "IMG" && element.dataset.img !== undefined) {
@@ -209,10 +252,12 @@ export function collectPrims(root: HTMLElement, glyphs: GlyphCheck): Prim[] {
     if (element.classList.contains("run") && (element.dataset.underline || element.dataset.strike)) {
       const size = Number(element.dataset.size ?? 11);
       const base = baselineOffset(element);
+      const clip = clipOf(element);
       for (const r of Array.from(element.getClientRects())) {
         if (r.width < 0.5) continue;
-        const x1 = (r.left - ox) * PX;
-        const x2 = (r.right - ox) * PX;
+        const x1 = Math.max((r.left - ox) * PX, clip?.left ?? -Infinity);
+        const x2 = Math.min((r.right - ox) * PX, clip?.right ?? Infinity);
+        if (x2 - x1 < 0.5) continue;
         const baseline = (r.top - oy) * PX + base;
         const color = element.dataset.color ?? "#000000";
         const thickness = Math.max(0.5, size * 0.055);
@@ -248,6 +293,7 @@ export function collectPrims(root: HTMLElement, glyphs: GlyphCheck): Prim[] {
     const color = span.dataset.color ?? "#000000";
     const spacing = Number(span.dataset.spacing ?? 0) || undefined;
     const base = baselineOffset(span);
+    const clip = clipOf(span);
     for (const m of text.matchAll(/[^\s\u200B]+/g)) {
       const start = m.index!;
       const word = m[0];
@@ -266,7 +312,11 @@ export function collectPrims(root: HTMLElement, glyphs: GlyphCheck): Prim[] {
         range.setStart(node, start + seg.from);
         range.setEnd(node, start + seg.to);
         const rects = Array.from(range.getClientRects()).filter((r) => r.width > 0);
-        if (rects.length <= 1) {
+        const whole = rects[0] ?? range.getBoundingClientRect();
+        const cut = clip !== null && rects.length <= 1 &&
+          ((whole.left - ox) * PX < clip.left - 0.01 || (whole.right - ox) * PX > clip.right + 0.01);
+        if (cut && ((whole.right - ox) * PX <= clip!.left || (whole.left - ox) * PX >= clip!.right)) continue;
+        if (rects.length <= 1 && !cut) {
           const r = rects[0] ?? range.getBoundingClientRect();
           const prim: Extract<Prim, { kind: "text" }> = {
             kind: "text",
@@ -289,12 +339,17 @@ export function collectPrims(root: HTMLElement, glyphs: GlyphCheck): Prim[] {
           }
           continue;
         }
-        // Palavra partida entre linhas (endereço longo, hifenização): letra a letra.
+        // Palavra partida entre linhas (endereço longo, hifenização) ou cortada
+        // na borda da célula: letra a letra.
         for (let k = seg.from; k < seg.to; k++) {
           range.setStart(node, start + k);
           range.setEnd(node, start + k + 1);
           const r = range.getBoundingClientRect();
           if (r.width <= 0) continue;
+          if (clip) {
+            const mid = ((r.left + r.right) / 2 - ox) * PX;
+            if (mid < clip.left || mid > clip.right) continue;
+          }
           texts.push({ kind: "text", x: (r.left - ox) * PX, y: (r.top - oy) * PX + base, size, text: word[k], font: seg.font, color, spacing });
         }
       }

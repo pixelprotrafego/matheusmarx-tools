@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -76,7 +76,6 @@ const ToolbarButton = ({
 );
 
 const Notepad = () => {
-  const contentRef = useRef<HTMLDivElement>(null);
   const [fontSize, setFontSize] = useState("16");
   const { expanded, toggle } = useExpanded();
 
@@ -97,7 +96,7 @@ const Notepad = () => {
     content: typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) || "<p></p>" : "<p></p>",
     editorProps: {
       attributes: {
-        class: "prose prose-invert max-w-none focus:outline-none min-h-[400px] p-6",
+        class: "max-w-none focus:outline-none min-h-[400px] p-6",
       },
     },
     onUpdate: ({ editor }) => {
@@ -138,10 +137,7 @@ const Notepad = () => {
       else if (kind === "md") await toMd(editor);
       else if (kind === "html") await toHtml(editor);
       else if (kind === "docx") await toDocx(editor);
-      else if (kind === "pdf") {
-        if (!contentRef.current) return;
-        await toPdf(contentRef.current);
-      }
+      else if (kind === "pdf") await toPdf(editor);
       toast.success(`Exportado como ${kind.toUpperCase()}`);
     } catch (e) {
       toast.error("Falha ao exportar", { description: e instanceof Error ? e.message : String(e) });
@@ -252,7 +248,6 @@ const Notepad = () => {
         cartão do site.
       */}
       <div
-        ref={contentRef}
         className={
           expanded
             ? "flex-1 min-h-0 rounded-lg border border-border bg-background tiptap-shell overflow-auto w-full"

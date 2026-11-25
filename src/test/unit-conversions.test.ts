@@ -119,3 +119,16 @@ describe("formatConverted", () => {
     expect(formatConverted(Infinity)).toBe("—");
   });
 });
+
+describe("fatores exatos", () => {
+  const cat = (k: string) => CATEGORIES.find((c) => c.key === k)!;
+  it("1 lb são 16 oz e 1 nó são 1,852 km/h, sem resíduo na tela", () => {
+    expect(formatConverted(convert(1, cat("mass"), "lb", "oz"))).toBe("16");
+    expect(formatConverted(convert(1, cat("speed"), "kn", "kmh"))).toBe("1.852");
+    expect(formatConverted(convert(1, cat("volume"), "galus", "floz"))).toBe("128");
+  });
+
+  it("inteiro grande de bytes sai inteiro", () => {
+    expect(formatConverted(convert(1, cat("data"), "TiB", "B"))).toBe("1099511627776");
+  });
+});

@@ -8,8 +8,7 @@ import { ChevronDown, Wallet } from "lucide-react";
 import {
   calcularRescisao,
   moeda,
-  TABELA_INSS_PADRAO,
-  TABELA_IRRF_PADRAO,
+  tabelasPara,
   TIPOS_RESCISAO,
   type TabelaInss,
   type TabelaIrrf,
@@ -31,8 +30,13 @@ const RescisaoCalculator = () => {
   const [saldoFgts, setSaldoFgts] = useState("0");
   const [dependentes, setDependentes] = useState("0");
 
-  const [tabelaInss, setTabelaInss] = useState<TabelaInss>(TABELA_INSS_PADRAO);
-  const [tabelaIrrf, setTabelaIrrf] = useState<TabelaIrrf>(TABELA_IRRF_PADRAO);
+  // Sem edição, valem as tabelas oficiais da data da rescisão (mudar a data de
+  // 2025 para 2026 troca as tabelas); editada, vale a versão de quem usa.
+  const [tabelaInssEditada, setTabelaInss] = useState<TabelaInss | null>(null);
+  const [tabelaIrrfEditada, setTabelaIrrf] = useState<TabelaIrrf | null>(null);
+  const tabelasDaData = tabelasPara(demissao);
+  const tabelaInss = tabelaInssEditada ?? tabelasDaData.inss;
+  const tabelaIrrf = tabelaIrrfEditada ?? tabelasDaData.irrf;
 
   const resultado = useMemo(
     () =>
@@ -238,6 +242,37 @@ const RescisaoCalculator = () => {
               className="w-40"
             />
           </div>
+
+          <div className="space-y-2">
+            <Label>IRRF — desconto simplificado mensal</Label>
+            <Input
+              value={String(tabelaIrrf.descontoSimplificado ?? 0)}
+              inputMode="decimal"
+              onChange={(e) =>
+                setTabelaIrrf({ ...tabelaIrrf, descontoSimplificado: numero(e.target.value), vigencia: "editada" })
+              }
+              className="w-40"
+            />
+            <p className="text-xs text-muted-foreground">
+              Usado no lugar de INSS e dependentes quando é maior que eles.
+              {tabelaIrrf.reducao
+                ? ` Com a redução da Lei 15.270/2025: imposto zerado até ${moeda(tabelaIrrf.reducao.isencaoAte)} de rendimento e reduzido até ${moeda(tabelaIrrf.reducao.ate)}.`
+                : " Sem a redução da Lei 15.270/2025, que só vale a partir de janeiro de 2026."}
+            </p>
+          </div>
+
+          {(tabelaInssEditada || tabelaIrrfEditada) && (
+            <button
+              type="button"
+              className="text-xs text-primary underline"
+              onClick={() => {
+                setTabelaInss(null);
+                setTabelaIrrf(null);
+              }}
+            >
+              Voltar às tabelas oficiais da data da rescisão
+            </button>
+          )}
         </CollapsibleContent>
       </Collapsible>
 

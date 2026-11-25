@@ -12,19 +12,29 @@ const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const DIGITS = "23456789";
 const SYMBOLS = "!@#$%&*?+-_=";
 
+/**
+ * Senha com `crypto.getRandomValues`, por amostragem por rejeição (sem o viés
+ * do módulo) e com pelo menos um caractere de cada tipo marcado: sem essa
+ * garantia, com tudo marcado e 16 caracteres, cerca de 13% das senhas saíam sem
+ * número e 4,5% sem símbolo, e sites que exigem os dois as recusavam. Sortear
+ * de novo a senha inteira até ela ter todos os tipos mantém o sorteio uniforme
+ * entre as senhas válidas.
+ */
 function generate(length: number, lower: boolean, upper: boolean, digits: boolean, symbols: boolean) {
-  let pool = "";
-  if (lower) pool += LOWER;
-  if (upper) pool += UPPER;
-  if (digits) pool += DIGITS;
-  if (symbols) pool += SYMBOLS;
-  if (!pool) pool = LOWER;
+  const sets = [lower && LOWER, upper && UPPER, digits && DIGITS, symbols && SYMBOLS].filter(Boolean) as string[];
+  if (!sets.length) sets.push(LOWER);
+  const pool = sets.join("");
   const len = Math.min(128, Math.max(6, length));
-  const arr = new Uint32Array(len);
-  crypto.getRandomValues(arr);
-  let out = "";
-  for (let i = 0; i < len; i++) out += pool[arr[i] % pool.length];
-  return out;
+  const limit = Math.floor(0x1_0000_0000 / pool.length) * pool.length;
+  const word = new Uint32Array(1);
+  for (;;) {
+    let out = "";
+    while (out.length < len) {
+      crypto.getRandomValues(word);
+      if (word[0] < limit) out += pool[word[0] % pool.length];
+    }
+    if (sets.every((set) => [...out].some((c) => set.includes(c)))) return out;
+  }
 }
 
 function strength(pw: string): { label: string; color: string; pct: number } {

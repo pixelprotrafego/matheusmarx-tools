@@ -18,59 +18,23 @@ const XlsxToPdf = () => {
     setFile(selectedFile);
     setLoading(true);
     setProgress(10);
-    setResultUrl(null);
+    // Libera o PDF anterior: sem isso, cada conversão fica presa na memória.
+    setResultUrl((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return null;
+    });
     setError(null);
 
     try {
-      const XLSX = await import("xlsx");
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: "array" });
-      setProgress(30);
-
-      const { default: jsPDF } = await import("jspdf");
-      // O pacote expõe a função ora como default, ora como o próprio módulo,
-      // dependendo do interop CJS/ESM.
-      const autoTableMod = await import("jspdf-autotable");
-      const autoTable = autoTableMod.default ?? (autoTableMod as unknown as typeof autoTableMod.default);
-
-      const pdf = new jsPDF("l", "mm", "a4");
-      let firstSheet = true;
-
-      for (let s = 0; s < workbook.SheetNames.length; s++) {
-        const name = workbook.SheetNames[s];
-        const sheet = workbook.Sheets[name];
-        const rows: string[][] = XLSX.utils.sheet_to_json(sheet, {
-          header: 1,
-          blankrows: false,
-          defval: "",
-          raw: false,
-        });
-        if (!rows.length) continue;
-
-        if (!firstSheet) pdf.addPage();
-        firstSheet = false;
-
-        pdf.setFontSize(14);
-        pdf.text(name, 14, 14);
-
-        const head = [rows[0].map((c) => String(c ?? ""))];
-        const body = rows.slice(1).map((r) => r.map((c) => String(c ?? "")));
-
-        autoTable(pdf, {
-          head,
-          body,
-          startY: 18,
-          styles: { fontSize: 8, cellPadding: 2, overflow: "linebreak" },
-          headStyles: { fillColor: [40, 40, 40], textColor: 255 },
-          alternateRowStyles: { fillColor: [248, 248, 248] },
-          margin: { left: 10, right: 10 },
-        });
-
-        setProgress(30 + Math.round(((s + 1) / workbook.SheetNames.length) * 60));
-      }
-
+      // Como o "Salvar como PDF" do Excel: aparência da planilha, página,
+      // escala e cabeçalho/rodapé dela, texto real e selecionável.
+      const { xlsxToPdf } = await import("@/lib/xlsx-to-pdf");
+      const { bytes } = await xlsxToPdf(await selectedFile.arrayBuffer(), {
+        fileName: selectedFile.name,
+        onProgress: (fraction) => setProgress(10 + Math.round(fraction * 85)),
+      });
       setProgress(100);
-      const blob = pdf.output("blob");
+      const blob = new Blob([bytes], { type: "application/pdf" });
       setResultUrl(URL.createObjectURL(blob));
       toast.success("Excel convertido para PDF (texto selecionável)!");
     } catch (err) {

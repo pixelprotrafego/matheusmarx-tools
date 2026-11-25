@@ -59,6 +59,8 @@ export interface ParaProps {
   keepLines: boolean;
   pageBreakBefore: boolean;
   widowControl: boolean;
+  /** Linha única, sem quebra (texto de célula de planilha). */
+  noWrap?: boolean;
   tabs: TabStop[];
   shading: string | null;
   borders: { top?: Border; bottom?: Border; left?: Border; right?: Border; between?: Border };
@@ -114,7 +116,14 @@ export type Inline =
   | { kind: "text"; text: string; props: RunProps; link?: string }
   | { kind: "tab"; props: RunProps }
   | { kind: "break"; type: "line" | "page" | "column"; props: RunProps }
-  | { kind: "field"; field: "PAGE" | "NUMPAGES" | "SECTIONPAGES"; props: RunProps; fallback: string }
+  | {
+      kind: "field";
+      field: "PAGE" | "NUMPAGES" | "SECTIONPAGES";
+      props: RunProps;
+      fallback: string;
+      /** Formato pedido no próprio campo (PAGE com a opção "\* roman"), no vocabulário do w:numFmt. */
+      format?: string;
+    }
   | { kind: "image"; image: ImageRef; props: RunProps; anchor: Anchor | null }
   | {
       kind: "box"; width: number; height: number; blocks: Block[]; shape: Shape | null; anchor: Anchor | null; props: RunProps;
@@ -146,6 +155,11 @@ export interface Cell {
   vAlign: "top" | "center" | "bottom";
   margins: { top: number; right: number; bottom: number; left: number };
   blocks: Block[];
+  /**
+   * Quanto o conteúdo pode invadir as células vizinhas (vazias) à esquerda e
+   * à direita, em pontos; além disso ele é cortado. Como o texto do Excel.
+   */
+  overflow?: { left: number; right: number; clipToCell?: boolean };
 }
 
 export interface Row {
@@ -153,6 +167,8 @@ export interface Row {
   heightRule: "auto" | "atLeast" | "exact";
   header: boolean;
   cantSplit: boolean;
+  /** Quebra de página manual antes desta linha (planilha). */
+  breakBefore?: boolean;
   cells: Cell[];
   /** Colunas da grade puladas antes da primeira célula (`gridBefore`). */
   gridBefore: number;
@@ -166,6 +182,11 @@ export interface Table {
   width: { type: "pt" | "pct"; value: number } | null;
   /** Layout fixo (`tblLayout` fixed); senão, ajuste automático ao conteúdo. */
   fixed: boolean;
+  /**
+   * Bordas desenhadas sobre as linhas da grade, sem ocupar espaço na célula
+   * (como no Excel). No Word, a borda fica dentro da célula.
+   */
+  gridBorders?: boolean;
   align: "left" | "center" | "right";
   indent: number;
   rows: Row[];
@@ -193,6 +214,8 @@ export interface SectionProps {
   headers: { default?: Block[]; first?: Block[]; even?: Block[] };
   footers: { default?: Block[]; first?: Block[]; even?: Block[] };
   pageNumberStart: number | null;
+  /** Formato do número de página da seção (w:pgNumType w:fmt): lowerRoman, upperRoman... */
+  pageNumberFormat?: string | null;
 }
 
 export interface Section {

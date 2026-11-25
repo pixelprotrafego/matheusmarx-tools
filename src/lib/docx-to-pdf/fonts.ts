@@ -19,7 +19,9 @@ const MAP: Record<string, FontKey> = {
   calibri: "carlito", "calibri light": "carlito", carlito: "carlito", candara: "carlito", corbel: "carlito",
   cambria: "caladea", "cambria math": "caladea", caladea: "caladea", constantia: "caladea",
   arial: "liberation-sans", helvetica: "liberation-sans", "arial nova": "liberation-sans", "arial narrow": "liberation-sans",
-  aptos: "liberation-sans", "aptos display": "liberation-sans", "aptos narrow": "liberation-sans",
+  // Aptos Narrow (padrão do Excel novo) tem dígitos de 0,513 em; a Carlito, de
+  // 0,507 em: é a equivalente mais próxima entre as fontes do pacote.
+  aptos: "liberation-sans", "aptos display": "liberation-sans", "aptos narrow": "carlito",
   "segoe ui": "liberation-sans", "segoe ui light": "liberation-sans", verdana: "liberation-sans", tahoma: "liberation-sans",
   "trebuchet ms": "liberation-sans", "century gothic": "liberation-sans", "franklin gothic book": "liberation-sans",
   "gill sans mt": "liberation-sans", "lucida sans": "liberation-sans", "lucida sans unicode": "liberation-sans",

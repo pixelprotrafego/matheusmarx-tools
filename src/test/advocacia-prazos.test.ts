@@ -131,3 +131,17 @@ describe("entradas inválidas", () => {
     expect(uteis("2025-01-10", 5000).ok).toBe(false);
   });
 });
+
+describe("correções dos prazos", () => {
+  it("recusa data que não existe em vez de contar de outro dia", () => {
+    expect(uteis("2025-02-30", 5).ok).toBe(false);
+  });
+
+  it("Semana Santa da Justiça Federal só entra quando ligada", () => {
+    // Páscoa de 2026: 5 de abril. Publicação na terça, 31/03.
+    const sem = uteis("2026-03-31", 1);
+    const com = uteis("2026-03-31", 1, { incluirSemanaSanta: true });
+    expect(sem.vencimento).toBe("2026-04-01");
+    expect(com.vencimento).toBe("2026-04-06");
+  });
+});

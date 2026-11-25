@@ -29,6 +29,8 @@ export interface PlannedPage {
   pieces: FlowPiece[];
   footnotes: string[];
   number: number;
+  /** Formato do número da página (o da seção: decimal, lowerRoman...). */
+  numberFormat: string;
   /** Página dentro da seção, para SECTIONPAGES. */
   sectionPage: number;
   running: RunningKind;
@@ -80,6 +82,7 @@ export function paginate(
       pieces: [],
       footnotes: [],
       number: pageNumber,
+      numberFormat: p.pageNumberFormat ?? "decimal",
       sectionPage,
       running,
       bodyTop,

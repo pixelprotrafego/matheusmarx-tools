@@ -81,30 +81,35 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 export type ProgressCallback = (progress: number) => void;
 
-function attachProgressListener(ffmpeg: FFmpeg, onProgress?: ProgressCallback) {
-  if (!onProgress) return;
-  ffmpeg.on("progress", ({ progress: p }) => onProgress(Math.round(p * 100)));
+/**
+ * Quem recebe o progresso agora. Um ouvinte só por instância, que repassa para
+ * a ferramenta da vez: antes cada chamada somava um ouvinte novo, e as
+ * ferramentas usadas antes continuavam recebendo o progresso das seguintes.
+ */
+let progressHandler: ProgressCallback | undefined;
+
+export function setProgressHandler(onProgress?: ProgressCallback) {
+  progressHandler = onProgress;
+}
+
+function listenProgress(ffmpeg: FFmpeg) {
+  ffmpeg.on("progress", ({ progress: p }) => {
+    // Sem a duração da entrada, o ffmpeg.wasm manda valores fora de 0..1.
+    if (progressHandler && Number.isFinite(p)) progressHandler(Math.max(0, Math.min(100, Math.round(p * 100))));
+  });
 }
 
 export async function getFFmpeg(onProgress?: ProgressCallback): Promise<FFmpeg> {
-  if (ffmpegInstance) {
-    attachProgressListener(ffmpegInstance, onProgress);
-    return ffmpegInstance;
-  }
-
-  if (loadPromise) {
-    return loadPromise.then((instance) => {
-      attachProgressListener(instance, onProgress);
-      return instance;
-    });
-  }
+  setProgressHandler(onProgress);
+  if (ffmpegInstance) return ffmpegInstance;
+  if (loadPromise) return loadPromise;
 
   loadPromise = (async () => {
     let lastError: Error | null = null;
 
     for (const strategy of LOAD_STRATEGIES) {
       const ffmpeg = new FFmpeg();
-      attachProgressListener(ffmpeg, onProgress);
+      listenProgress(ffmpeg);
 
       try {
         await withTimeout(ffmpeg.load(strategy.config), LOAD_TIMEOUT_MS, `FFmpeg load [${strategy.name}]`);

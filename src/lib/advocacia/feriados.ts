@@ -123,9 +123,29 @@ export function feriadosForenses(ano: number): Feriado[] {
   ];
 }
 
+/**
+ * Quarta e quinta-feira santas (Lei 5.010/1966, art. 62, II: "os dias da
+ * semana santa, compreendidos entre a quarta-feira e o Domingo de Páscoa"; a
+ * sexta é feriado nacional e o fim de semana já não conta).
+ *
+ * Fica num grupo à parte, desligado por padrão: o STJ entende que esse
+ * feriado vale para a Justiça Federal e os tribunais superiores, não para a
+ * Justiça estadual. Contá-lo onde não vale empurra o vencimento para depois
+ * do real, que é o erro que faz perder prazo.
+ */
+export function semanaSantaFederal(ano: number): Feriado[] {
+  const pascoa = domingoDePascoa(ano);
+  return [
+    { data: chaveData(somarDias(pascoa, -4)), nome: "Quarta-feira Santa", tipo: "forense" },
+    { data: chaveData(somarDias(pascoa, -3)), nome: "Quinta-feira Santa", tipo: "forense" },
+  ];
+}
+
 export interface OpcoesFeriados {
   incluirForenses: boolean;
   incluirCarnavalCorpusChristi: boolean;
+  /** Quarta e quinta-feira santas (Justiça Federal e tribunais superiores). */
+  incluirSemanaSanta?: boolean;
   /** Datas `AAAA-MM-DD` acrescentadas por quem usa. */
   personalizados: { data: string; nome: string }[];
 }
@@ -145,6 +165,7 @@ export function montarCalendario(
     feriadosNacionais(ano).forEach(registrar);
     if (opcoes.incluirCarnavalCorpusChristi) diasSemExpedienteMoveis(ano).forEach(registrar);
     if (opcoes.incluirForenses) feriadosForenses(ano).forEach(registrar);
+    if (opcoes.incluirSemanaSanta) semanaSantaFederal(ano).forEach(registrar);
   }
 
   // Os personalizados entram por último mas têm precedência: se quem usa

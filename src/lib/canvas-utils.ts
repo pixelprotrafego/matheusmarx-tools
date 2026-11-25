@@ -15,7 +15,7 @@ export async function fileToImage(file: File | Blob): Promise<HTMLImageElement> 
 }
 
 export function drawToCanvas(
-  img: HTMLImageElement | ImageBitmap,
+  img: HTMLImageElement | ImageBitmap | HTMLCanvasElement,
   width?: number,
   height?: number,
   background?: string

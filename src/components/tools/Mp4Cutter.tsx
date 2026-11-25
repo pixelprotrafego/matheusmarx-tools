@@ -5,6 +5,8 @@ import { Slider } from "@/components/ui/slider";
 import { Upload, Download, Loader2, X, FileVideo, Scissors, AlertTriangle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { getFFmpeg, resetFFmpeg } from "@/lib/ffmpeg";
+import { probeMedia } from "@/lib/ffmpeg-runner";
+import { EVEN_SIZE, faststart, h264Args, mapStreams } from "@/lib/media-presets";
 
 const formatTime = (seconds: number) => {
   const m = Math.floor(seconds / 60);
@@ -56,14 +58,21 @@ const Mp4Cutter = () => {
       const { fetchFile } = await import("@ffmpeg/util");
       await ffmpeg.writeFile("input.mp4", await fetchFile(file));
 
-      const startSecs = range[0].toFixed(2);
-      const durSecs = (range[1] - range[0]).toFixed(2);
+      const startSecs = range[0].toFixed(3);
+      const durSecs = (range[1] - range[0]).toFixed(3);
+      const info = await probeMedia(ffmpeg, "input.mp4");
+      // Recodifica para o corte cair no quadro exato (copiar só corta em
+      // quadro-chave, que pode estar segundos antes). O "-ss" antes do "-i"
+      // pula direto ao ponto, sem decodificar o começo do vídeo à toa.
       const exitCode = await ffmpeg.exec([
-        "-i", "input.mp4",
         "-ss", startSecs,
+        "-i", "input.mp4",
         "-t", durSecs,
-        "-map", "0",
-        "-reset_timestamps", "1",
+        ...mapStreams(info, "mp4"),
+        ...h264Args(18),
+        "-vf", EVEN_SIZE,
+        "-c:a", "aac", "-b:a", "192k",
+        ...faststart("mp4"),
         "output.mp4",
       ]);
 

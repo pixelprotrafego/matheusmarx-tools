@@ -142,7 +142,10 @@ export function measureFlow(root: HTMLElement): FlowMetrics {
       } else inHeader = false;
       if (r > 0) {
         const previousHeader = rows[r - 1].dataset.header === "1";
-        cuts.push({ y: rel(rr.top), allowed: !previousHeader, fallback: true, forced: null, skip: 0, slack: 0 });
+        cuts.push({
+          y: rel(rr.top), allowed: !previousHeader, fallback: true,
+          forced: tr.dataset.breakBefore === "1" ? "page" : null, skip: 0, slack: 0,
+        });
       }
       if (tr.dataset.cantSplit === "1") return;
       // Linhas de texto das células: cortes de último recurso dentro da linha.

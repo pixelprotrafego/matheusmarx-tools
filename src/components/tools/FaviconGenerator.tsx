@@ -4,8 +4,9 @@ import Dropzone from "./shared/Dropzone";
 import FileBadge from "./shared/FileBadge";
 import ConvertButton from "./shared/ConvertButton";
 import ErrorState from "./shared/ErrorState";
-import { fileToImage, drawToCanvas, canvasToBlob } from "@/lib/canvas-utils";
-import { downloadAsZip } from "@/lib/download";
+import { fileToImage, canvasToBlob } from "@/lib/canvas-utils";
+import { downloadAsZip, bytesToBlob } from "@/lib/download";
+import { encodeIco, fitSquare } from "@/lib/image-encoders";
 import { ImageIcon } from "lucide-react";
 
 const SIZES = [16, 32, 48, 96, 180, 192, 512];
@@ -26,11 +27,17 @@ const FaviconGenerator = () => {
         });
       }
       const files: { name: string; blob: Blob }[] = [];
+      // Imagem não quadrada fica centralizada, sem esticar.
       for (const s of SIZES) {
-        const canvas = drawToCanvas(img, s, s);
-        const blob = await canvasToBlob(canvas, "image/png");
+        const blob = await canvasToBlob(fitSquare(img, s), "image/png");
         files.push({ name: `favicon-${s}x${s}.png`, blob });
       }
+      // favicon.ico com 16, 32 e 48 px, para navegadores e o Windows.
+      const ico = encodeIco([16, 32, 48].map((size) => {
+        const canvas = fitSquare(img, size);
+        return { size, pixels: canvas.getContext("2d")!.getImageData(0, 0, size, size) };
+      }));
+      files.push({ name: "favicon.ico", blob: bytesToBlob(ico, "image/x-icon") });
       const manifest = {
         name: "App",
         short_name: "App",

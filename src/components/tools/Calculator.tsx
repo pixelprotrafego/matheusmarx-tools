@@ -61,6 +61,35 @@ const SCI: Btn[] = [
   { label: "EE", kind: "op", insert: "*10^" },
 ];
 
+/**
+ * Resultado reaproveitado como começo da próxima conta. Negativo vai entre
+ * parênteses: "-3" seguido de x² seria -(3²) = -9, e o que se quer é (-3)² = 9.
+ */
+const asOperand = (r: string) => (r.startsWith("-") ? `(${r})` : r);
+
+/**
+ * Troca o sinal da expressão inteira, e não só do primeiro número: em "2+3",
+ * o antigo "-2+3" dava 1 em vez de -5. Apertar de novo desfaz.
+ */
+function balanced(s: string): boolean {
+  let depth = 0;
+  for (const c of s) {
+    depth += c === "(" ? 1 : c === ")" ? -1 : 0;
+    if (depth < 0) return false;
+  }
+  return depth === 0;
+}
+
+function toggleSign(e: string): string {
+  if (!e) return "-";
+  if (e === "-") return "";
+  const wrapped = /^\(-\((.*)\)\)$/.exec(e) ?? /^\(-([^()]*)\)$/.exec(e);
+  // Só desembrulha o que este botão embrulhou: em "(-(2)+(3))" o miolo
+  // "2)+(3" não fecha os parênteses.
+  if (wrapped && balanced(wrapped[1])) return wrapped[1];
+  return /^[\d.,]+(e[+-]?\d+)?$/i.test(e) ? `(-${e})` : `(-(${e}))`;
+}
+
 const Calculator = () => {
   const [expr, setExpr] = useState("");
   const [result, setResult] = useState("0");
@@ -89,7 +118,7 @@ const Calculator = () => {
         return;
       }
       if (btn.action === "SIGN") {
-        setExpr((e) => (e.startsWith("-") ? e.slice(1) : "-" + e));
+        setExpr(toggleSign);
         return;
       }
       if (btn.action === "=") {
@@ -97,7 +126,7 @@ const Calculator = () => {
           const r = formatNumber(evaluate(expr, angle));
           setResult(r);
           setHistory((h) => [{ expr, result: r }, ...h].slice(0, 8));
-          setExpr(r);
+          setExpr(asOperand(r));
         } catch {
           setResult("Erro");
         }
@@ -111,7 +140,13 @@ const Calculator = () => {
   // Keyboard support
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const k = e.key;
+      // Atalhos do navegador (Ctrl+0, Ctrl+C...) e digitação em outro campo
+      // da página não são da calculadora.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      // A tecla decimal do teclado numérico em português escreve vírgula.
+      const k = e.key === "," ? "." : e.key;
       if (/^[0-9.]$/.test(k)) setExpr((v) => v + k);
       else if (["+", "-", "*", "/", "(", ")", "^", "%"].includes(k)) setExpr((v) => v + k);
       else if (k === "Enter" || k === "=") handle({ label: "=", kind: "eq", action: "=" });
@@ -215,7 +250,7 @@ const Calculator = () => {
                 <li
                   key={i}
                   className="cursor-pointer group"
-                  onClick={() => setExpr(h.result)}
+                  onClick={() => setExpr(asOperand(h.result))}
                   title="Reutilizar resultado"
                 >
                   <div className="text-xs text-muted-foreground font-mono break-all group-hover:text-foreground transition-colors">

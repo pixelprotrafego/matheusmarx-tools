@@ -4,7 +4,10 @@ import {
   calcularIrrf,
   calcularRescisao,
   contarAvos,
+  reducaoIrrf,
+  tabelasPara,
   TABELA_INSS_PADRAO,
+  TABELA_IRRF_PADRAO,
   type EntradaRescisao,
 } from "@/lib/advocacia/rescisao";
 
@@ -26,8 +29,8 @@ const verba = (r: ReturnType<typeof calcularRescisao>, chave: string) =>
 
 describe("INSS progressivo", () => {
   it("aplica cada alíquota só sobre a parte da faixa", () => {
-    // 1518,00 a 7,5% + 1275,88 a 9% + 206,12 a 12%
-    expect(calcularInss(3000)).toBeCloseTo(253.41, 2);
+    // Tabela de 2026: 1621,00 a 7,5% + 1281,84 a 9% + 97,16 a 12%
+    expect(calcularInss(3000)).toBeCloseTo(248.6, 2);
   });
 
   it("cobra a alíquota menor inteira dentro da primeira faixa", () => {
@@ -52,13 +55,14 @@ describe("IRRF", () => {
   });
 
   it("desconta a dedução da faixa, e não a alíquota sobre o total", () => {
-    // Base 5000 - INSS 500 = 4500, faixa de 22,5% com dedução de 675,49.
-    expect(calcularIrrf(5000, 0, 500)).toBeCloseTo(4500 * 0.225 - 675.49, 2);
+    // Acima de R$ 7.350 não há redução: base 9000 - INSS 900 = 8100, faixa de
+    // 27,5% com dedução de 908,73.
+    expect(calcularIrrf(9000, 0, 900)).toBeCloseTo(8100 * 0.275 - 908.73, 2);
   });
 
   it("abate o valor por dependente", () => {
-    const sem = calcularIrrf(5000, 0, 500);
-    const com = calcularIrrf(5000, 2, 500);
+    const sem = calcularIrrf(9000, 0, 900);
+    const com = calcularIrrf(9000, 2, 900);
     expect(com).toBeLessThan(sem);
   });
 });
@@ -154,5 +158,64 @@ describe("entradas inválidas", () => {
   it("recusa salário zerado e datas fora de ordem", () => {
     expect(calcularRescisao(entrada({ salarioMensal: 0 })).ok).toBe(false);
     expect(calcularRescisao(entrada({ admissao: "2025-01-01", demissao: "2024-01-01" })).ok).toBe(false);
+  });
+});
+
+describe("IRRF de 2026 (Lei 15.270/2025)", () => {
+  // Exemplos da orientação da Receita Federal de dezembro de 2025.
+  it("R$ 4.500 com desconto simplificado: imposto zerado pela redução", () => {
+    expect(calcularIrrf(4500, 0, 0)).toBe(0);
+  });
+
+  it("R$ 6.000 com desconto simplificado: 574,29 - 179,75 = 394,54", () => {
+    expect(calcularIrrf(6000, 0, 0)).toBeCloseTo(394.54, 2);
+  });
+
+  it("R$ 6.000 com INSS de 641,51 (maior que o simplificado): 564,85 - 179,75", () => {
+    expect(calcularIrrf(6000, 0, 641.51)).toBeCloseTo(385.1, 2);
+  });
+
+  it("acima de R$ 7.350 não há redução", () => {
+    expect(reducaoIrrf(7351, 1000, TABELA_IRRF_PADRAO.reducao)).toBe(0);
+  });
+
+  it("o simplificado vale quando é maior que INSS e dependentes", () => {
+    // 9000 - 607,20 (o INSS informado, 300, é menor)
+    expect(calcularIrrf(9000, 0, 300)).toBeCloseTo((9000 - 607.2) * 0.275 - 908.73, 2);
+  });
+});
+
+describe("correções da rescisão", () => {
+  it("mês inteiro trabalhado é saldo de 30 dias, em fevereiro e em mês de 31", () => {
+    const fev = calcularRescisao(entrada({ demissao: "2025-02-28", avisoPrevio: "trabalhado" }));
+    expect(verba(fev, "saldo")?.valor).toBeCloseTo(3000, 2);
+    const jan = calcularRescisao(entrada({ demissao: "2025-01-31", avisoPrevio: "trabalhado" }));
+    expect(verba(jan, "saldo")?.valor).toBeCloseTo(3000, 2);
+    const meio = calcularRescisao(entrada({ demissao: "2025-01-15", avisoPrevio: "trabalhado" }));
+    expect(verba(meio, "saldo")?.valor).toBeCloseTo(1500, 2);
+  });
+
+  it("aviso que projeta para o ano seguinte não apaga o 13º do ano da dispensa", () => {
+    const r = calcularRescisao(entrada({ demissao: "2024-12-10" }));
+    // 4 anos completos: 42 dias de aviso, projeção até 21/01/2025.
+    expect(r.dataProjetada).toBe("2025-01-21");
+    expect(verba(r, "decimo")?.valor).toBeCloseTo(3000, 2); // 12/12 de 2024
+    expect(verba(r, "decimo")?.descricao).toBe("13º salário proporcional de 2024");
+    expect(verba(r, "decimo-projetado")?.valor).toBeCloseTo(250, 2); // 1/12 de 2025
+  });
+
+  it("acordo paga a metade exata do aviso, sem perder meio dia", () => {
+    // 4 anos completos: 42 dias; com 5 anos, 45 dias, metade 22,5.
+    const r = calcularRescisao(entrada({ tipo: "acordo" }));
+    expect(verba(r, "aviso")?.valor).toBeCloseTo((3000 / 30) * 22.5, 2);
+  });
+});
+
+describe("tabelas da data da rescisão", () => {
+  it("2025 sem a redução de 2026; 2026 com ela e com o INSS novo", () => {
+    expect(tabelasPara("2025-06-20").irrf.reducao).toBeUndefined();
+    expect(tabelasPara("2025-06-20").inss.faixas[0].ate).toBe(1518);
+    expect(tabelasPara("2026-03-02").irrf.reducao?.isencaoAte).toBe(5000);
+    expect(tabelasPara("2026-03-02").inss.faixas[3].ate).toBe(8475.55);
   });
 });

@@ -520,6 +520,25 @@ async function scrubImageViaCanvas(file: File, mime: string): Promise<Blob> {
   }
 }
 
+/**
+ * Metadados fora sem recodificar: os pixels, o perfil de cor e a orientação
+ * ficam como estavam. Arquivo fora do padrão volta para o canvas, que também
+ * limpa (recodificando).
+ */
+async function scrubLossless(
+  file: File,
+  mime: string,
+  pick: (m: typeof import("./image-metadata-strip")) => (bytes: Uint8Array) => Uint8Array,
+): Promise<Blob> {
+  try {
+    const strip = pick(await import("./image-metadata-strip"));
+    const out = strip(new Uint8Array(await file.arrayBuffer()));
+    return new Blob([out.slice().buffer], { type: mime });
+  } catch {
+    return scrubImageViaCanvas(file, mime);
+  }
+}
+
 async function scrubPdf(file: File, password?: string): Promise<Blob> {
   const lib = await loadPdfLib();
   const opened = await openPdf(new Uint8Array(await file.arrayBuffer()), password, { updateMetadata: false });
@@ -562,11 +581,11 @@ export async function scrubMetadata(
 ): Promise<Blob> {
   switch (kind) {
     case "jpg":
-      return scrubImageViaCanvas(file, "image/jpeg");
+      return scrubLossless(file, "image/jpeg", (m) => m.stripJpeg);
     case "png":
-      return scrubImageViaCanvas(file, "image/png");
+      return scrubLossless(file, "image/png", (m) => m.stripPng);
     case "webp":
-      return scrubImageViaCanvas(file, "image/webp");
+      return scrubLossless(file, "image/webp", (m) => m.stripWebp);
     case "heic":
       return scrubHeicAs(file, outputFormat);
     case "pdf":

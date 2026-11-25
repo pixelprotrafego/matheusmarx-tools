@@ -44,9 +44,21 @@ const HOST = process.env.DEV_EXPOSE ? "::" : "localhost";
  * grupo vira um pedaço carregado só quando a ferramenta que depende dele é
  * aberta.
  */
-const GRUPOS_DE_PACOTES: ReadonlyArray<{ nome: string; pacotes: readonly string[] }> = [
-  { nome: "pdf-vendor", pacotes: ["pdf-lib", "pdfjs-dist"] },
-  { nome: "office-vendor", pacotes: ["xlsx", "docx", "docx-preview"] },
+const GRUPOS_DE_PACOTES: ReadonlyArray<{ nome: string; pacotes: readonly string[]; tambem?: RegExp }> = [
+  // Primeiro da lista, para vencer os outros grupos: cada grupo leva junto as
+  // dependências dos seus pacotes, e o React (que o TipTap usa) ia parar no
+  // editor-vendor, o tslib, o fflate e o auxiliar de import() do Vite no
+  // pdf-vendor. Como a página inicial precisa deles, toda visita baixava o
+  // editor e o motor de PDF inteiros (cerca de 1,4 MB) antes de qualquer clique.
+  {
+    nome: "base-vendor",
+    pacotes: ["react", "react-dom", "scheduler", "use-sync-external-store", "tslib", "fflate"],
+    tambem: /vite[\\/]preload-helper/,
+  },
+  // "@cantoo/pdf-lib": o projeto usa este fork; o "pdf-lib" que estava aqui não
+  // casava com nada, e o motor de PDF ia parar em pedaços compartilhados.
+  { nome: "pdf-vendor", pacotes: ["@cantoo/pdf-lib", "pdfjs-dist"] },
+  { nome: "office-vendor", pacotes: ["xlsx", "docx"] },
   { nome: "ffmpeg-vendor", pacotes: ["@ffmpeg/ffmpeg", "@ffmpeg/util"] },
   { nome: "editor-vendor", pacotes: ["@tiptap"] },
   // Fora do editor-vendor de propósito: o turndown é usado tanto pelo Notepad
@@ -67,13 +79,14 @@ const escaparRegex = (texto: string) => texto.replace(/[.*+?^${}()|[\]\\]/g, "\\
  * no meio do caminho, já marcado como obsoleto pelo próprio Rolldown.
  *
  * Cada teste casa com a pasta do pacote dentro de `node_modules`. A barra
- * depois do nome é o que impede `jspdf` de arrastar junto o `jspdf-autotable`,
- * e `docx` de arrastar o `docx-preview` por engano — este último está na lista
- * por nome próprio, porque ali é desejado.
+ * depois do nome é o que impede um nome de casar com outro pacote que só
+ * começa igual (`jspdf` com um `jspdf-algo`, `docx` com um `docx-algo`).
  */
-const gruposDeChunk = GRUPOS_DE_PACOTES.map(({ nome, pacotes }) => ({
+const gruposDeChunk = GRUPOS_DE_PACOTES.map(({ nome, pacotes, tambem }) => ({
   name: nome,
-  test: new RegExp(`node_modules[\\\\/](?:${pacotes.map(escaparRegex).join("|")})[\\\\/]`),
+  test: new RegExp(
+    `node_modules[\\\\/](?:${pacotes.map(escaparRegex).join("|")})[\\\\/]${tambem ? `|${tambem.source}` : ""}`,
+  ),
 }));
 
 export default defineConfig(() => ({

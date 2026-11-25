@@ -8,6 +8,7 @@ import ProgressState from "./shared/ProgressState";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { runFFmpeg } from "@/lib/ffmpeg-runner";
+import { GIF_PALETTE, gifSteps } from "@/lib/media-presets";
 import { downloadBlob, replaceExt } from "@/lib/download";
 import { formatReset } from "@/lib/rate-limit";
 import { guard, guardMessage } from "@/lib/abuse-guard";
@@ -26,6 +27,19 @@ const VideoToGif = () => {
 
   const go = async () => {
     if (!file) return;
+    const seconds = (v: string) => Number(v.trim().replace(",", "."));
+    const from = seconds(start);
+    const length = seconds(duration);
+    if (!Number.isFinite(from) || from < 0 || !Number.isFinite(length) || length <= 0) {
+      toast.error("Informe o início e a duração em segundos (por exemplo, 0 e 5).");
+      return;
+    }
+    // O GIF marca o tempo em centésimos: acima de 50 quadros por segundo os
+    // navegadores tocam mais devagar.
+    if (!(fps >= 1 && fps <= 50) || !(width >= 16 && width <= 1920)) {
+      toast.error("Use de 1 a 50 quadros por segundo e largura de 16 a 1920 px.");
+      return;
+    }
     const rl = guard("video-gif", { hourly: 10, daily: 30 });
     if (!rl.ok) {
       toast.error(guardMessage(rl), rl.reason === "bot" ? undefined : { description: `Tente novamente em ${formatReset(rl.resetInMs)}.` });
@@ -35,10 +49,10 @@ const VideoToGif = () => {
     try {
       const blob = await runFFmpeg({
         inputs: [{ name: "in.mp4", data: file }],
-        args: ["-ss", start, "-t", duration, "-i", "in.mp4",
-               "-vf", `fps=${fps},scale=${width}:-1:flags=lanczos`,
-               "out.gif"],
+        args: gifSteps("in.mp4", "out.gif", `fps=${Math.round(fps)},scale=${Math.round(width)}:-1:flags=lanczos`,
+          ["-ss", String(from), "-t", String(length)]),
         output: "out.gif",
+        temps: [GIF_PALETTE],
         onProgress: setProgress,
         onStatus: setStatus,
       });

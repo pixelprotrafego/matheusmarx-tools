@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Upload, Download, Loader2, X, FileVideo, FileAudio, AlertTriangle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { runFFmpeg } from "@/lib/ffmpeg-runner";
-import { MEDIA_INPUT_FORMATS, getOutputs, getFFmpegArgs, getMimeType, isAudio } from "@/lib/media-presets";
+import { MEDIA_INPUT_FORMATS, GIF_PALETTE, getOutputs, getFFmpegArgs, getMimeType, isAudio } from "@/lib/media-presets";
 
 const MediaConverter = () => {
   const [inputFormat, setInputFormat] = useState("");
@@ -48,11 +48,11 @@ const MediaConverter = () => {
     const outputFile = `output.${outputFormat}`;
 
     try {
-      const args = getFFmpegArgs(inputFormat, outputFormat, { audioBitrate: bitrate });
       const raw = await runFFmpeg({
         inputs: [{ name: inputFile, data: file }],
-        args,
+        args: (info) => getFFmpegArgs(inputFormat, outputFormat, { audioBitrate: bitrate }, info),
         output: outputFile,
+        temps: [GIF_PALETTE],
         onProgress: setProgress,
         onStatus: setStatusText,
       });
